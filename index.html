@@ -805,11 +805,23 @@ function renderSell(content) {
     </div>
     <div class="sale-right">
       <div class="cart-header">🛒 Đơn hàng</div>
-      <div class="customer-select">
-        <select id="cart-customer" style="width:100%;font-size:13px" onchange="selectCustomer(this.value)">
-          <option value="">-- Khách lẻ --</option>
-          ${Object.entries(allCustomers).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'','vi')).map(([k,c])=>`<option value="${k}">${c.name} ${c.phone?'('+c.phone+')':''}</option>`).join('')}
-        </select>
+      <div class="customer-select" style="position:relative">
+        <div style="display:flex;gap:6px;align-items:center">
+          <div style="position:relative;flex:1">
+            <input type="text" id="cart-customer-input" placeholder="👤 Tìm tên / SĐT khách hàng..."
+              style="width:100%;font-size:13px;padding-right:28px"
+              oninput="searchCustomerSuggest(this.value)"
+              onkeydown="customerKeyNav(event)"
+              autocomplete="off">
+            <button onclick="clearCustomerSelect()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-3);font-size:16px;line-height:1" title="Xóa">×</button>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="openAddCustomer()" title="Thêm khách mới" style="flex-shrink:0;padding:7px 10px">+</button>
+        </div>
+        <div id="cart-customer-selected" style="display:none;margin-top:6px;padding:7px 10px;background:var(--blue-light);border-radius:7px;font-size:12px;display:flex;align-items:center;justify-content:space-between">
+          <span id="cart-customer-label" style="font-weight:600;color:var(--blue-dark)"></span>
+          <button onclick="clearCustomerSelect()" style="background:none;border:none;cursor:pointer;color:var(--blue-dark);font-size:14px">×</button>
+        </div>
+        <div id="customer-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:200;background:#fff;border:1.5px solid var(--blue);border-radius:0 0 10px 10px;max-height:220px;overflow-y:auto;box-shadow:0 6px 20px rgba(26,111,212,0.15)"></div>
       </div>
       <div class="cart-items" id="cart-items">
         <div class="empty-state" style="padding:30px"><div class="icon">🛒</div>Chưa có sản phẩm</div>
@@ -871,9 +883,87 @@ window.addToCart = (key) => {
 };
 
 window.selectCustomer = (key) => {
-  selectedCustomer = key ? allCustomers[key] : null;
-  if (selectedCustomer) selectedCustomer._key = key;
+  selectedCustomer = key ? {...allCustomers[key], _key: key} : null;
 };
+
+let customerSuggestIndex = -1;
+
+window.searchCustomerSuggest = (q) => {
+  const box = document.getElementById('customer-suggest'); if(!box) return;
+  customerSuggestIndex = -1;
+  q = q.trim();
+  if (!q) { box.style.display='none'; return; }
+  const results = Object.entries(allCustomers).filter(([k,c]) =>
+    c.name && (c.name.toLowerCase().includes(q.toLowerCase()) || (c.phone||'').includes(q))
+  ).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'','vi')).slice(0,10);
+
+  if (!results.length) {
+    box.innerHTML = `<div style="padding:12px 14px;font-size:13px;color:var(--text-3)">Không tìm thấy khách hàng — <span style="color:var(--blue);cursor:pointer;font-weight:600" onclick="openAddCustomer()">+ Thêm mới</span></div>`;
+    box.style.display='block'; return;
+  }
+  box.innerHTML = results.map(([k,c],i)=>`
+    <div class="customer-suggest-item" data-key="${k}" data-idx="${i}"
+      onclick="selectCustomerFromSuggest('${k}')"
+      onmouseenter="customerSuggestIndex=${i};highlightSuggest()"
+      style="padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;font-size:13px;transition:background .1s">
+      <div style="width:30px;height:30px;border-radius:50%;background:var(--blue-light);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--blue-dark);flex-shrink:0">${(c.name||'?')[0].toUpperCase()}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:var(--text)">${c.name}</div>
+        <div style="font-size:11px;color:var(--text-3)">${c.phone||'Chưa có SĐT'}${(c.debt||0)>0?' · Nợ: <span style="color:var(--red);font-weight:600">'+fmt(c.debt)+'</span>':''}</div>
+      </div>
+    </div>`).join('') +
+    `<div style="padding:8px 14px;font-size:12px;color:var(--blue);cursor:pointer;text-align:center;font-weight:600" onclick="openAddCustomer()">+ Thêm khách hàng mới</div>`;
+  box.style.display='block';
+};
+
+window.selectCustomerFromSuggest = (key) => {
+  const c = allCustomers[key]; if(!c) return;
+  selectedCustomer = {...c, _key: key};
+  const inp = document.getElementById('cart-customer-input');
+  const sel = document.getElementById('cart-customer-selected');
+  const lbl = document.getElementById('cart-customer-label');
+  if(inp) inp.value = '';
+  if(lbl) lbl.innerHTML = `👤 ${c.name}${c.phone?' · '+c.phone:''}${(c.debt||0)>0?' · <span style="color:var(--red)">Nợ: '+fmt(c.debt)+'</span>':''}`;
+  if(sel) { sel.style.display='flex'; }
+  const box = document.getElementById('customer-suggest');
+  if(box) box.style.display='none';
+};
+
+window.clearCustomerSelect = () => {
+  selectedCustomer = null;
+  const inp = document.getElementById('cart-customer-input');
+  const sel = document.getElementById('cart-customer-selected');
+  const box = document.getElementById('customer-suggest');
+  if(inp) inp.value='';
+  if(sel) sel.style.display='none';
+  if(box) box.style.display='none';
+};
+
+window.highlightSuggest = () => {
+  document.querySelectorAll('.customer-suggest-item').forEach((el,i)=>{
+    el.style.background = i===customerSuggestIndex ? 'var(--blue-light)' : '';
+  });
+};
+
+window.customerKeyNav = (e) => {
+  const items = document.querySelectorAll('.customer-suggest-item');
+  if(!items.length) return;
+  if(e.key==='ArrowDown'){ e.preventDefault(); customerSuggestIndex=Math.min(customerSuggestIndex+1,items.length-1); highlightSuggest(); }
+  else if(e.key==='ArrowUp'){ e.preventDefault(); customerSuggestIndex=Math.max(customerSuggestIndex-1,0); highlightSuggest(); }
+  else if(e.key==='Enter' && customerSuggestIndex>=0){
+    e.preventDefault();
+    const key = items[customerSuggestIndex]?.dataset?.key;
+    if(key) selectCustomerFromSuggest(key);
+  } else if(e.key==='Escape'){
+    document.getElementById('customer-suggest').style.display='none';
+  }
+};
+
+// Close suggest when clicking outside
+document.addEventListener('click', e=>{
+  if(!e.target.closest('#cart-customer-input') && !e.target.closest('#customer-suggest'))
+    { const b=document.getElementById('customer-suggest'); if(b) b.style.display='none'; }
+});
 
 function renderCart() {
   const el = document.getElementById('cart-items'); if(!el) return;
@@ -897,7 +987,7 @@ window.changeQty = (i,d) => { cart[i].qty = Math.max(1, (cart[i].qty||1)+d); ren
 window.setQty = (i,v) => { cart[i].qty = Math.max(1, parseInt(v)||1); renderCart(); };
 window.setPrice = (i,v) => { cart[i].price = parseInt(v)||0; renderCart(); };
 window.removeFromCart = (i) => { cart.splice(i,1); renderCart(); };
-window.clearCart = () => { cart=[]; selectedCustomer=null; renderCart(); };
+window.clearCart = () => { cart=[]; selectedCustomer=null; clearCustomerSelect(); renderCart(); };
 
 window.updateCartTotals = () => {
   const sub = cart.reduce((s,i)=>s+i.price*i.qty,0);
@@ -951,6 +1041,7 @@ window.createOrder = async () => {
   showOrderDetail(order);
   cart=[]; selectedCustomer=null;
   renderSell(document.getElementById('main-content'));
+  setTimeout(()=>clearCustomerSelect(), 50);
 };
 
 // ── ORDERS ──
