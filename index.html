@@ -28,6 +28,7 @@
     --shadow: 0 1px 4px rgba(26,111,212,0.08);
   }
   * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:100%; height:100%; }
   body { font-family: 'Segoe UI', system-ui, sans-serif; background:var(--bg); color:var(--text); height:100vh; overflow:hidden; display:flex; flex-direction:column; }
 
   /* ── LOGIN ── */
@@ -85,13 +86,13 @@
   .btn-logout:hover { color:#fff; background:rgba(255,255,255,0.1); }
 
   /* ── MAIN ── */
-  .main { margin-left:var(--sidebar-w); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+  .main { margin-left:var(--sidebar-w); height:100vh; display:flex; flex-direction:column; overflow:hidden; width:calc(100% - var(--sidebar-w)); }
   .topbar {
     height:var(--header-h); background:var(--bg-card); border-bottom:1px solid var(--border);
-    display:flex; align-items:center; padding:0 24px; gap:12px; flex-shrink:0;
+    display:flex; align-items:center; padding:0 28px; gap:12px; flex-shrink:0;
   }
   .topbar h2 { font-size:16px; font-weight:700; flex:1; }
-  .content { flex:1; overflow-y:auto; padding:20px 24px; }
+  .content { flex:1; overflow-y:auto; padding:22px 28px; }
 
   /* ── CARDS / STATS ── */
   .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
@@ -560,68 +561,176 @@ window.toast = (msg, type='') => {
 window.closeModal = id => document.getElementById(id).classList.remove('open');
 
 // ── DASHBOARD ──
-function renderDashboard(content) {
+function renderDashboard(content, actions) {
   const prods = Object.values(allProducts);
   const orders = Object.values(allOrders);
   const today = new Date(); today.setHours(0,0,0,0);
   const todayOrders = orders.filter(o => o.createdAt >= today.getTime());
   const todayRevenue = todayOrders.reduce((s,o)=>s+(o.total||0),0);
+  const todayProfit = todayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
   const totalStock = prods.reduce((s,p)=>s+(p.avgPrice||p.importPrice||0)*(p.stock||0),0);
-  const lowStock = prods.filter(p=>(p.stock||0)>0 && (p.stock||0)<=3).length;
-  const outStock = prods.filter(p=>(p.stock||0)===0).length;
-
-  // Month revenue
+  const lowStock = prods.filter(p=>(p.stock||0)>0&&(p.stock||0)<=3).length;
+  const outStock = prods.filter(p=>p.name&&(p.stock||0)===0).length;
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-  const monthRevenue = orders.filter(o=>o.createdAt>=monthStart.getTime()).reduce((s,o)=>s+(o.total||0),0);
+  const monthOrders = orders.filter(o=>o.createdAt>=monthStart.getTime());
+  const monthRevenue = monthOrders.reduce((s,o)=>s+(o.total||0),0);
+  const monthProfit = monthOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
+
+  // Top selling products this month
+  const salesMap = {};
+  monthOrders.forEach(o=>(o.items||[]).forEach(i=>{
+    if(!salesMap[i.name]) salesMap[i.name]={name:i.name,qty:0,revenue:0};
+    salesMap[i.name].qty+=i.qty; salesMap[i.name].revenue+=i.subtotal||i.price*i.qty;
+  }));
+  const topProducts = Object.values(salesMap).sort((a,b)=>b.qty-a.qty).slice(0,5);
+
+  // Chart data - last 14 days
+  const chartDays = 14;
+  const chartData = Array.from({length:chartDays},(_,i)=>{
+    const d = new Date(); d.setDate(d.getDate()-chartDays+1+i); d.setHours(0,0,0,0);
+    const next = new Date(d); next.setDate(next.getDate()+1);
+    const dayOrders = orders.filter(o=>o.createdAt>=d.getTime()&&o.createdAt<next.getTime());
+    return {
+      label: `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`,
+      rev: dayOrders.reduce((s,o)=>s+(o.total||0),0),
+      profit: dayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0)
+    };
+  });
+
+  actions.innerHTML = `
+    <div class="flex-gap">
+      <button class="btn btn-primary" onclick="navigate('sell')">🛒 Tạo đơn mới</button>
+      <button class="btn btn-outline" onclick="navigate('import')">📦 Nhập hàng</button>
+      <button class="btn btn-outline" onclick="navigate('warranty')">🔧 Bảo hành</button>
+    </div>`;
+
+  const maxRev = Math.max(...chartData.map(d=>d.rev), 1);
 
   content.innerHTML = `
-  <div class="stats-grid">
-    <div class="stat-card">
+  <!-- STATS ROW -->
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:22px">
+    <div class="stat-card" style="grid-column:span 1">
       <div class="stat-label">Doanh thu hôm nay</div>
-      <div class="stat-value">${fmt(todayRevenue)}</div>
+      <div class="stat-value" style="font-size:18px">${fmt(todayRevenue)}</div>
       <div class="stat-sub">${todayOrders.length} đơn hàng</div>
     </div>
-    <div class="stat-card green">
-      <div class="stat-label">Doanh thu tháng này</div>
-      <div class="stat-value">${fmt(monthRevenue)}</div>
-      <div class="stat-sub">${orders.filter(o=>o.createdAt>=monthStart.getTime()).length} đơn</div>
+    <div class="stat-card green" style="grid-column:span 1">
+      <div class="stat-label">Lợi nhuận hôm nay</div>
+      <div class="stat-value" style="font-size:18px">${fmt(todayProfit)}</div>
+      <div class="stat-sub">Biên lợi nhuận ${todayRevenue?Math.round(todayProfit/todayRevenue*100):0}%</div>
     </div>
-    <div class="stat-card orange">
+    <div class="stat-card" style="grid-column:span 1">
+      <div class="stat-label">Doanh thu tháng</div>
+      <div class="stat-value" style="font-size:18px">${fmt(monthRevenue)}</div>
+      <div class="stat-sub">${monthOrders.length} đơn</div>
+    </div>
+    <div class="stat-card green" style="grid-column:span 1">
+      <div class="stat-label">Lợi nhuận tháng</div>
+      <div class="stat-value" style="font-size:18px">${fmt(monthProfit)}</div>
+      <div class="stat-sub">Biên ${monthRevenue?Math.round(monthProfit/monthRevenue*100):0}%</div>
+    </div>
+    <div class="stat-card orange" style="grid-column:span 1">
       <div class="stat-label">Giá trị tồn kho</div>
-      <div class="stat-value">${fmt(totalStock)}</div>
-      <div class="stat-sub">${prods.filter(p=>(p.stock||0)>0).length} mặt hàng còn hàng</div>
+      <div class="stat-value" style="font-size:18px">${fmt(totalStock)}</div>
+      <div class="stat-sub">${prods.filter(p=>p.name&&(p.stock||0)>0).length} mặt hàng</div>
     </div>
-    <div class="stat-card red">
-      <div class="stat-label">Cảnh báo tồn kho</div>
-      <div class="stat-value">${lowStock + outStock}</div>
-      <div class="stat-sub">${outStock} hết hàng · ${lowStock} sắp hết</div>
+    <div class="stat-card red" style="grid-column:span 1">
+      <div class="stat-label">Cảnh báo kho</div>
+      <div class="stat-value" style="font-size:18px">${lowStock+outStock}</div>
+      <div class="stat-sub">${outStock} hết · ${lowStock} sắp hết</div>
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+  <!-- CHART + TOP PRODUCTS -->
+  <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;margin-bottom:18px">
+    <!-- CHART -->
+    <div class="table-wrap" style="padding:18px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div style="font-size:14px;font-weight:700">📈 Doanh thu & Lợi nhuận — 14 ngày gần nhất</div>
+        <div style="display:flex;gap:14px;font-size:12px">
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:3px;background:var(--blue);display:inline-block;border-radius:2px"></span>Doanh thu</span>
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:3px;background:var(--green);display:inline-block;border-radius:2px"></span>Lợi nhuận</span>
+        </div>
+      </div>
+      <div style="height:180px;display:flex;align-items:flex-end;gap:3px;padding-bottom:24px;position:relative">
+        <!-- Y axis hint -->
+        <div style="position:absolute;top:0;left:0;right:0;height:1px;background:var(--border);"></div>
+        <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:var(--border);opacity:.5"></div>
+        <div style="position:absolute;top:0;left:-4px;font-size:10px;color:var(--text-3);transform:translateY(-50%)">${fmtShort(maxRev)}</div>
+        ${chartData.map((d,i)=>{
+          const revH = maxRev>0 ? Math.round((d.rev/maxRev)*140) : 0;
+          const profH = maxRev>0 ? Math.round((Math.max(0,d.profit)/maxRev)*140) : 0;
+          const isToday = i===chartDays-1;
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;position:relative">
+            <div style="width:100%;display:flex;align-items:flex-end;justify-content:center;gap:1px;height:140px">
+              <div style="width:45%;background:${isToday?'var(--blue)':'rgba(26,111,212,0.35)'};height:${revH}px;border-radius:2px 2px 0 0;transition:height .3s" title="DT: ${fmt(d.rev)}"></div>
+              <div style="width:45%;background:${isToday?'var(--green)':'rgba(22,163,74,0.4)'};height:${profH}px;border-radius:2px 2px 0 0;transition:height .3s" title="LN: ${fmt(d.profit)}"></div>
+            </div>
+            <div style="font-size:9px;color:${isToday?'var(--blue)':'var(--text-3)'};font-weight:${isToday?'700':'400'};white-space:nowrap;position:absolute;bottom:-18px">${d.label}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- TOP PRODUCTS -->
     <div class="table-wrap">
-      <div class="table-header"><span class="table-title">⚠️ Hàng sắp hết / hết kho</span></div>
+      <div class="table-header"><span class="table-title">🔥 Top bán chạy tháng này</span></div>
+      ${topProducts.length ? topProducts.map((p,i)=>`
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+        <div style="width:22px;height:22px;border-radius:50%;background:${i===0?'#FFA000':i===1?'#90A4AE':i===2?'#CD7F32':'var(--blue-light)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${i<3?'#fff':'var(--blue)'};flex-shrink:0">${i+1}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
+          <div style="font-size:11px;color:var(--text-3)">${fmt(p.revenue)}</div>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--blue);white-space:nowrap">${p.qty} cái</div>
+      </div>`).join('') : `<div class="empty-state" style="padding:30px"><div class="icon">📊</div>Chưa có dữ liệu</div>`}
+    </div>
+  </div>
+
+  <!-- BOTTOM ROW -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="table-wrap">
+      <div class="table-header"><span class="table-title">📋 Đơn hàng gần nhất</span><button class="btn btn-outline btn-sm" onclick="navigate('orders')">Xem tất cả</button></div>
       <table>
-        <thead><tr><th>Sản phẩm</th><th>Tồn kho</th><th>Giá bán</th></tr></thead>
+        <thead><tr><th>Mã đơn</th><th>Thời gian</th><th>Khách hàng</th><th style="text-align:right">Tổng tiền</th></tr></thead>
         <tbody>
-          ${prods.filter(p=>(p.stock||0)<=3).sort((a,b)=>(a.stock||0)-(b.stock||0)).slice(0,10).map(p=>`
-          <tr><td>${p.name||'--'}</td>
-          <td><span class="${(p.stock||0)===0?'stock-zero':'stock-low'}">${p.stock||0}</span></td>
-          <td class="price-tag">${fmt(p.price)}</td></tr>`).join('') || '<tr><td colspan="3" class="text-success" style="text-align:center;padding:20px">✅ Không có hàng nào sắp hết</td></tr>'}
+          ${orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(o=>`
+          <tr onclick="viewOrderFromKey('${Object.keys(allOrders).find(k=>allOrders[k]===o)}')" style="cursor:pointer">
+            <td class="mono" style="font-weight:700">${o.code||'--'}</td>
+            <td style="font-size:11px;color:var(--text-3)">${timeAgo(o.createdAt)}</td>
+            <td>${o.customerName||'Khách lẻ'}</td>
+            <td style="text-align:right" class="price-tag">${fmt(o.total)}</td>
+          </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-3)">Chưa có đơn hàng nào</td></tr>'}
         </tbody>
       </table>
     </div>
     <div class="table-wrap">
-      <div class="table-header"><span class="table-title">📋 Đơn hàng gần nhất</span></div>
+      <div class="table-header"><span class="table-title">⚠️ Hàng sắp hết / hết kho</span><button class="btn btn-outline btn-sm" onclick="navigate('inventory')">Xem kho</button></div>
       <table>
-        <thead><tr><th>Mã đơn</th><th>Khách</th><th>Tổng tiền</th></tr></thead>
+        <thead><tr><th>Sản phẩm</th><th>Nhóm</th><th style="text-align:center">Tồn</th><th style="text-align:right">Giá bán</th></tr></thead>
         <tbody>
-          ${orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,8).map(o=>`
-          <tr><td class="mono">${o.code||'--'}</td><td>${o.customerName||'Khách lẻ'}</td><td class="price-tag">${fmt(o.total)}</td></tr>`).join('') || '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-3)">Chưa có đơn hàng nào</td></tr>'}
+          ${prods.filter(p=>p.name&&(p.stock||0)<=3).sort((a,b)=>(a.stock||0)-(b.stock||0)).slice(0,6).map(p=>`
+          <tr>
+            <td style="font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</td>
+            <td style="font-size:11px;color:var(--text-3)">${p.group||'--'}</td>
+            <td style="text-align:center"><span class="${(p.stock||0)===0?'stock-zero':'stock-low'}">${p.stock||0}</span></td>
+            <td style="text-align:right" class="price-tag">${fmt(p.price)}</td>
+          </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px" class="text-success">✅ Tồn kho ổn định</td></tr>'}
         </tbody>
       </table>
     </div>
   </div>`;
+}
+
+const fmtShort = n => n>=1e9?Math.round(n/1e9)+'T':n>=1e6?Math.round(n/1e6)+'M':n>=1e3?Math.round(n/1e3)+'K':n;
+const timeAgo = ts => {
+  if(!ts) return '';
+  const diff = Date.now()-ts;
+  if(diff<3600000) return Math.round(diff/60000)+' phút trước';
+  if(diff<86400000) return Math.round(diff/3600000)+' giờ trước';
+  return Math.round(diff/86400000)+' ngày trước';
+};
+window.viewOrderFromKey = (key) => { if(key && allOrders[key]) showOrderDetail(allOrders[key]); };
 }
 
 // ── INVENTORY ──
