@@ -297,7 +297,7 @@
 </div>
 
 <!-- APP -->
-<div id="app" style="display:none; flex:1; display:flex; overflow:hidden;">
+<div id="app" style="display:none; overflow:hidden; flex:1;">
 
   <!-- SIDEBAR -->
   <div class="sidebar">
@@ -489,6 +489,7 @@ onAuthStateChanged(auth, user => {
   if (user) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
+    document.getElementById('app').style.height = '100vh';
     document.getElementById('user-name').textContent = user.displayName || user.email;
     if (user.photoURL) document.getElementById('user-avatar').src = user.photoURL;
     loadAllData();
