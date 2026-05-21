@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/TVH%20386/Downloads/index_2.html -->
+<!-- saved from url=(0049)file:///C:/Users/TVH%20386/Downloads/index_3.html -->
 <html lang="vi"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -286,7 +286,7 @@
 <body>
 
 <!-- LOGIN -->
-<div id="login-screen">
+<div id="login-screen" style="display: flex;">
   <div class="login-card">
     <div class="login-logo">🖥️</div>
     <h1>Máy tính An Thái</h1>
@@ -345,7 +345,7 @@
     </nav>
     <div class="sidebar-footer">
       <div class="user-info">
-        <img id="user-avatar" class="user-avatar" src="file:///C:/Users/TVH%20386/Downloads/index_2.html" onerror="this.style.display=&#39;none&#39;" alt="" style="display: none;">
+        <img id="user-avatar" class="user-avatar" src="file:///C:/Users/TVH%20386/Downloads/index_3.html" onerror="this.style.display=&#39;none&#39;" alt="" style="display: none;">
         <span id="user-name" class="user-name">Đang tải...</span>
         <button class="btn-logout" onclick="signOut()" title="Đăng xuất">⏻</button>
       </div>
@@ -735,7 +735,6 @@ const timeAgo = ts => {
   return Math.round(diff/86400000)+' ngày trước';
 };
 window.viewOrderFromKey = (key) => { if(key && allOrders[key]) showOrderDetail(allOrders[key]); };
-}
 
 // ── INVENTORY ──
 function renderInventory(content, actions) {
