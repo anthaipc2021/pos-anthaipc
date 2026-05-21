@@ -1,7 +1,7 @@
 <!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
+<!-- saved from url=(0049)file:///C:/Users/TVH%20386/Downloads/index_2.html -->
+<html lang="vi"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Máy tính An Thái</title>
 <style>
@@ -53,7 +53,9 @@
   .btn-google svg { flex-shrink:0; }
 
   /* ── LAYOUT ── */
-  #app { display:none; flex:1; overflow:hidden; }
+  #app { display:none; flex:1; overflow:hidden; width:100%; }
+  /* Sidebar chỉ hiện khi đã đăng nhập */
+  body:not(.app-ready) .sidebar { display:none !important; }
   .sidebar {
     width:var(--sidebar-w); background:#0f1b35; height:100vh;
     display:flex; flex-direction:column; flex-shrink:0; position:fixed; left:0; top:0; z-index:100;
@@ -290,14 +292,14 @@
     <h1>Máy tính An Thái</h1>
     <p>Phần mềm quản lý bán hàng</p>
     <button class="btn-google" onclick="signInWithGoogle()">
-      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"></path><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"></path><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"></path><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"></path></svg>
       Đăng nhập bằng Google
     </button>
   </div>
 </div>
 
 <!-- APP -->
-<div id="app" style="display:none; overflow:hidden; flex:1;">
+<div id="app" style="display:none;">
 
   <!-- SIDEBAR -->
   <div class="sidebar">
@@ -310,40 +312,40 @@
     </div>
     <nav class="sidebar-nav">
       <div class="nav-section">Tổng quan</div>
-      <button class="nav-item active" onclick="navigate('dashboard')">
+      <button class="nav-item active" onclick="navigate(&#39;dashboard&#39;)">
         <span class="icon">📊</span> Tổng quan
       </button>
       <div class="nav-section">Bán hàng</div>
-      <button class="nav-item" onclick="navigate('sell')">
+      <button class="nav-item" onclick="navigate(&#39;sell&#39;)">
         <span class="icon">🛒</span> Bán hàng
       </button>
-      <button class="nav-item" onclick="navigate('orders')">
+      <button class="nav-item" onclick="navigate(&#39;orders&#39;)">
         <span class="icon">📋</span> Lịch sử đơn
       </button>
       <div class="nav-section">Kho hàng</div>
-      <button class="nav-item" onclick="navigate('inventory')">
+      <button class="nav-item" onclick="navigate(&#39;inventory&#39;)">
         <span class="icon">📦</span> Tồn kho
       </button>
-      <button class="nav-item" onclick="navigate('import')">
+      <button class="nav-item" onclick="navigate(&#39;import&#39;)">
         <span class="icon">⬇️</span> Nhập hàng
       </button>
-      <button class="nav-item" onclick="navigate('catalog')">
+      <button class="nav-item" onclick="navigate(&#39;catalog&#39;)">
         <span class="icon">🏷️</span> Danh sách hàng hóa
       </button>
       <div class="nav-section">Danh mục</div>
-      <button class="nav-item" onclick="navigate('customers')">
+      <button class="nav-item" onclick="navigate(&#39;customers&#39;)">
         <span class="icon">👥</span> Khách hàng
       </button>
-      <button class="nav-item" onclick="navigate('suppliers')">
+      <button class="nav-item" onclick="navigate(&#39;suppliers&#39;)">
         <span class="icon">🏭</span> Nhà cung cấp
       </button>
-      <button class="nav-item" onclick="navigate('warranty')">
+      <button class="nav-item" onclick="navigate(&#39;warranty&#39;)">
         <span class="icon">🔧</span> Bảo hành
       </button>
     </nav>
     <div class="sidebar-footer">
       <div class="user-info">
-        <img id="user-avatar" class="user-avatar" src="" onerror="this.style.display='none'" alt="">
+        <img id="user-avatar" class="user-avatar" src="file:///C:/Users/TVH%20386/Downloads/index_2.html" onerror="this.style.display=&#39;none&#39;" alt="" style="display: none;">
         <span id="user-name" class="user-name">Đang tải...</span>
         <button class="btn-logout" onclick="signOut()" title="Đăng xuất">⏻</button>
       </div>
@@ -370,7 +372,7 @@
   <div class="modal">
     <div class="modal-header">
       <h3 id="modal-product-title">Thêm sản phẩm</h3>
-      <button class="btn-close" onclick="closeModal('modal-product')">×</button>
+      <button class="btn-close" onclick="closeModal(&#39;modal-product&#39;)">×</button>
     </div>
     <div class="modal-body">
       <div class="form-group"><label>Tên sản phẩm *</label><input type="text" id="p-name" placeholder="Nhập tên sản phẩm"></div>
@@ -395,7 +397,7 @@
       <input type="hidden" id="p-key">
     </div>
     <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeModal('modal-product')">Hủy</button>
+      <button class="btn btn-outline" onclick="closeModal(&#39;modal-product&#39;)">Hủy</button>
       <button class="btn btn-primary" onclick="saveProduct()">💾 Lưu</button>
     </div>
   </div>
@@ -406,7 +408,7 @@
   <div class="modal">
     <div class="modal-header">
       <h3 id="modal-customer-title">Thêm khách hàng</h3>
-      <button class="btn-close" onclick="closeModal('modal-customer')">×</button>
+      <button class="btn-close" onclick="closeModal(&#39;modal-customer&#39;)">×</button>
     </div>
     <div class="modal-body">
       <div class="form-group"><label>Tên khách hàng *</label><input type="text" id="c-name" placeholder="Nhập tên khách hàng"></div>
@@ -415,7 +417,7 @@
       <input type="hidden" id="c-key">
     </div>
     <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeModal('modal-customer')">Hủy</button>
+      <button class="btn btn-outline" onclick="closeModal(&#39;modal-customer&#39;)">Hủy</button>
       <button class="btn btn-primary" onclick="saveCustomer()">💾 Lưu</button>
     </div>
   </div>
@@ -426,12 +428,12 @@
   <div class="modal" style="max-width:600px;">
     <div class="modal-header">
       <h3>Chi tiết đơn hàng</h3>
-      <button class="btn-close" onclick="closeModal('modal-order')">×</button>
+      <button class="btn-close" onclick="closeModal(&#39;modal-order&#39;)">×</button>
     </div>
     <div class="modal-body" id="modal-order-body"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="printOrder()">🖨️ In</button>
-      <button class="btn btn-outline" onclick="closeModal('modal-order')">Đóng</button>
+      <button class="btn btn-outline" onclick="closeModal(&#39;modal-order&#39;)">Đóng</button>
     </div>
   </div>
 </div>
@@ -489,13 +491,14 @@ onAuthStateChanged(auth, user => {
   if (user) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
-    document.getElementById('app').style.height = '100vh';
+    document.body.classList.add('app-ready');
     document.getElementById('user-name').textContent = user.displayName || user.email;
     if (user.photoURL) document.getElementById('user-avatar').src = user.photoURL;
     loadAllData();
   } else {
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
+    document.body.classList.remove('app-ready');
   }
 });
 
@@ -1705,5 +1708,6 @@ window.searchWarranty = (q) => {
 };
 
 </script>
-</body>
-</html>
+
+
+</body></html>
