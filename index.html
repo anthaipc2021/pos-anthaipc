@@ -58,6 +58,8 @@
     width:var(--sidebar-w); background:#0f1b35; height:100vh;
     display:flex; flex-direction:column; flex-shrink:0; position:fixed; left:0; top:0; z-index:100;
   }
+  /* Sidebar chỉ hiện khi body có class app-ready */
+  body:not(.app-ready) .sidebar { display:none !important; }
   .sidebar-logo {
     padding:0 18px; height:var(--header-h); display:flex; align-items:center; gap:10px;
     border-bottom:1px solid rgba(255,255,255,0.08);
@@ -489,12 +491,14 @@ onAuthStateChanged(auth, user => {
   if (user) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
+    document.body.classList.add('app-ready');
     document.getElementById('user-name').textContent = user.displayName || user.email;
     if (user.photoURL) document.getElementById('user-avatar').src = user.photoURL;
     loadAllData();
   } else {
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
+    document.body.classList.remove('app-ready');
   }
 });
 
