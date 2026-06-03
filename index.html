@@ -565,41 +565,66 @@ window.toast = (msg, type='') => {
 window.closeModal = id => document.getElementById(id).classList.remove('open');
 
 // ── DASHBOARD ──
+let dashPeriod = 'today'; // today | yesterday | week | month | all
+
+function getDashRange(period) {
+  const now = new Date();
+  const today = new Date(); today.setHours(0,0,0,0);
+  if (period === 'today') return { from: today.getTime(), to: now.getTime(), label: 'Hôm nay' };
+  if (period === 'yesterday') {
+    const y = new Date(today); y.setDate(y.getDate()-1);
+    return { from: y.getTime(), to: today.getTime()-1, label: 'Hôm qua' };
+  }
+  if (period === 'week') {
+    const w = new Date(today); w.setDate(w.getDate()-6);
+    return { from: w.getTime(), to: now.getTime(), label: 'Tuần này (7 ngày)' };
+  }
+  if (period === 'month') {
+    const m = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: m.getTime(), to: now.getTime(), label: 'Tháng này' };
+  }
+  return { from: 0, to: now.getTime(), label: 'Tất cả' };
+}
+
+window.setDashPeriod = (p) => { dashPeriod = p; renderDashboard(document.getElementById('main-content'), document.getElementById('topbar-actions')); };
+
 function renderDashboard(content, actions) {
   const prods = Object.values(allProducts);
-  const orders = Object.values(allOrders);
-  const today = new Date(); today.setHours(0,0,0,0);
-  const todayOrders = orders.filter(o => o.createdAt >= today.getTime());
-  const todayRevenue = todayOrders.reduce((s,o)=>s+(o.total||0),0);
-  const todayProfit = todayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
+  const allOrdersArr = Object.entries(allOrders);
+  const range = getDashRange(dashPeriod);
+  const filteredOrders = allOrdersArr.filter(([,o])=> (o.createdAt||0)>=range.from && (o.createdAt||0)<=range.to).map(([,o])=>o);
+
+  const revenue = filteredOrders.reduce((s,o)=>s+(o.total||0),0);
+  const profit = filteredOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
   const totalStock = prods.reduce((s,p)=>s+(p.avgPrice||p.importPrice||0)*(p.stock||0),0);
   const lowStock = prods.filter(p=>(p.stock||0)>0&&(p.stock||0)<=3).length;
   const outStock = prods.filter(p=>p.name&&(p.stock||0)===0).length;
-  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-  const monthOrders = orders.filter(o=>o.createdAt>=monthStart.getTime());
-  const monthRevenue = monthOrders.reduce((s,o)=>s+(o.total||0),0);
-  const monthProfit = monthOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
 
-  // Top selling products this month
+  // Top selling in period
   const salesMap = {};
-  monthOrders.forEach(o=>(o.items||[]).forEach(i=>{
+  filteredOrders.forEach(o=>(o.items||[]).forEach(i=>{
     if(!salesMap[i.name]) salesMap[i.name]={name:i.name,qty:0,revenue:0};
     salesMap[i.name].qty+=i.qty; salesMap[i.name].revenue+=i.subtotal||i.price*i.qty;
   }));
   const topProducts = Object.values(salesMap).sort((a,b)=>b.qty-a.qty).slice(0,5);
 
-  // Chart data - last 14 days
+  // Chart data — 14 days
   const chartDays = 14;
   const chartData = Array.from({length:chartDays},(_,i)=>{
     const d = new Date(); d.setDate(d.getDate()-chartDays+1+i); d.setHours(0,0,0,0);
     const next = new Date(d); next.setDate(next.getDate()+1);
-    const dayOrders = orders.filter(o=>o.createdAt>=d.getTime()&&o.createdAt<next.getTime());
+    const dayOrders = Object.values(allOrders).filter(o=>o.createdAt>=d.getTime()&&o.createdAt<next.getTime());
     return {
       label: `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`,
       rev: dayOrders.reduce((s,o)=>s+(o.total||0),0),
       profit: dayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0)
     };
   });
+
+  const periods = [
+    {id:'today',label:'Hôm Nay'},{id:'yesterday',label:'Hôm Qua'},
+    {id:'week',label:'Tuần Này'},{id:'month',label:'Tháng Này'},{id:'all',label:'Tất Cả'}
+  ];
 
   actions.innerHTML = `
     <div class="flex-gap">
@@ -611,27 +636,39 @@ function renderDashboard(content, actions) {
   const maxRev = Math.max(...chartData.map(d=>d.rev), 1);
 
   content.innerHTML = `
+  <!-- PERIOD TABS -->
+  <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+    ${periods.map(p=>`
+      <button onclick="setDashPeriod('${p.id}')"
+        style="padding:7px 16px;border-radius:20px;border:1.5px solid ${dashPeriod===p.id?'var(--blue)':'var(--border)'};
+        background:${dashPeriod===p.id?'var(--blue)':'#fff'};color:${dashPeriod===p.id?'#fff':'var(--text-2)'};
+        font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">
+        ${p.label}
+      </button>`).join('')}
+    <span style="font-size:12px;color:var(--text-3);margin-left:4px">— ${range.label}</span>
+  </div>
+
   <!-- STATS ROW -->
   <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:22px">
     <div class="stat-card" style="grid-column:span 1">
-      <div class="stat-label">Doanh thu hôm nay</div>
-      <div class="stat-value" style="font-size:18px">${fmt(todayRevenue)}</div>
-      <div class="stat-sub">${todayOrders.length} đơn hàng</div>
+      <div class="stat-label">Doanh thu</div>
+      <div class="stat-value" style="font-size:18px">${fmt(revenue)}</div>
+      <div class="stat-sub">${filteredOrders.length} đơn hàng</div>
     </div>
     <div class="stat-card green" style="grid-column:span 1">
-      <div class="stat-label">Lợi nhuận hôm nay</div>
-      <div class="stat-value" style="font-size:18px">${fmt(todayProfit)}</div>
-      <div class="stat-sub">Biên lợi nhuận ${todayRevenue?Math.round(todayProfit/todayRevenue*100):0}%</div>
+      <div class="stat-label">Lợi nhuận</div>
+      <div class="stat-value" style="font-size:18px">${fmt(profit)}</div>
+      <div class="stat-sub">Biên ${revenue?Math.round(profit/revenue*100):0}%</div>
     </div>
     <div class="stat-card" style="grid-column:span 1">
-      <div class="stat-label">Doanh thu tháng</div>
-      <div class="stat-value" style="font-size:18px">${fmt(monthRevenue)}</div>
-      <div class="stat-sub">${monthOrders.length} đơn</div>
+      <div class="stat-label">Trung bình/đơn</div>
+      <div class="stat-value" style="font-size:18px">${fmt(filteredOrders.length?Math.round(revenue/filteredOrders.length):0)}</div>
+      <div class="stat-sub">${filteredOrders.length} đơn</div>
     </div>
-    <div class="stat-card green" style="grid-column:span 1">
-      <div class="stat-label">Lợi nhuận tháng</div>
-      <div class="stat-value" style="font-size:18px">${fmt(monthProfit)}</div>
-      <div class="stat-sub">Biên ${monthRevenue?Math.round(monthProfit/monthRevenue*100):0}%</div>
+    <div class="stat-card" style="grid-column:span 1">
+      <div class="stat-label">Lợi nhuận/đơn</div>
+      <div class="stat-value" style="font-size:18px;color:var(--green)">${fmt(filteredOrders.length?Math.round(profit/filteredOrders.length):0)}</div>
+      <div class="stat-sub">&nbsp;</div>
     </div>
     <div class="stat-card orange" style="grid-column:span 1">
       <div class="stat-label">Giá trị tồn kho</div>
@@ -657,7 +694,6 @@ function renderDashboard(content, actions) {
         </div>
       </div>
       <div style="height:180px;display:flex;align-items:flex-end;gap:3px;padding-bottom:24px;position:relative">
-        <!-- Y axis hint -->
         <div style="position:absolute;top:0;left:0;right:0;height:1px;background:var(--border);"></div>
         <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:var(--border);opacity:.5"></div>
         <div style="position:absolute;top:0;left:-4px;font-size:10px;color:var(--text-3);transform:translateY(-50%)">${fmtShort(maxRev)}</div>
@@ -678,7 +714,7 @@ function renderDashboard(content, actions) {
 
     <!-- TOP PRODUCTS -->
     <div class="table-wrap">
-      <div class="table-header"><span class="table-title">🔥 Top bán chạy tháng này</span></div>
+      <div class="table-header"><span class="table-title">🔥 Top bán chạy — ${range.label}</span></div>
       ${topProducts.length ? topProducts.map((p,i)=>`
       <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
         <div style="width:22px;height:22px;border-radius:50%;background:${i===0?'#FFA000':i===1?'#90A4AE':i===2?'#CD7F32':'var(--blue-light)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${i<3?'#fff':'var(--blue)'};flex-shrink:0">${i+1}</div>
@@ -698,7 +734,7 @@ function renderDashboard(content, actions) {
       <table>
         <thead><tr><th>Mã đơn</th><th>Thời gian</th><th>Khách hàng</th><th style="text-align:right">Tổng tiền</th></tr></thead>
         <tbody>
-          ${orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(o=>`
+          ${Object.values(allOrders).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(o=>`
           <tr onclick="viewOrderFromKey('${Object.keys(allOrders).find(k=>allOrders[k]===o)}')" style="cursor:pointer">
             <td class="mono" style="font-weight:700">${o.code||'--'}</td>
             <td style="font-size:11px;color:var(--text-3)">${timeAgo(o.createdAt)}</td>
@@ -884,7 +920,7 @@ window.saveProduct = async () => {
   allProducts[key] = data;
   closeModal('modal-product');
   toast(existing.name ? 'Đã cập nhật sản phẩm' : 'Đã thêm sản phẩm mới', 'success');
-  filterInventory();
+  if (currentPage === 'import') { const q = document.getElementById('imp-search')?.value||''; searchImport(q); } else { filterInventory(); }
 };
 
 window.deleteProduct = async (key, name) => {
@@ -1383,6 +1419,7 @@ function renderImport(content, actions) {
     <div style="display:flex;flex-direction:column;gap:12px;overflow:hidden">
       <div class="flex-gap">
         <div class="search-box" style="flex:1"><input type="search" id="imp-search" placeholder="Tìm sản phẩm..." style="width:100%" oninput="searchImport(this.value)"></div>
+        <button class="btn btn-outline" onclick="openAddProduct()" style="white-space:nowrap;flex-shrink:0">+ Thêm SP mới</button>
       </div>
       <div class="product-search-results" id="imp-results">
         <div class="empty-state"><div class="icon">🔍</div>Gõ tên sản phẩm để tìm</div>
