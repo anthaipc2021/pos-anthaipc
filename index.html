@@ -1406,7 +1406,7 @@ window.viewCustomerOrders = (key) => {
       + '<th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">SP</th>'
       + '<th style="padding:8px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>'
       + orders.map(([k,o]) =>
-          '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeModal('modal-order');setTimeout(()=>viewOrderFromKey(''+k+''),100)">'
+          `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeModal('modal-order');setTimeout(()=>viewOrderFromKey('${k}'),100)">`
           + '<td style="padding:8px;font-weight:700;font-family:monospace;color:var(--blue)">'+(o.code||k.slice(0,8))+'</td>'
           + '<td style="padding:8px;font-size:12px;color:var(--text-3)">'+fmtDate(o.createdAt)+'</td>'
           + '<td style="padding:8px;text-align:right;font-weight:700;color:var(--blue)">'+fmt(o.total)+'</td>'
@@ -1419,7 +1419,7 @@ window.viewCustomerOrders = (key) => {
     + '<div style="width:44px;height:44px;border-radius:50%;background:var(--blue-light);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--blue-dark);flex-shrink:0">'+(c.name||'?')[0].toUpperCase()+'</div>'
     + '<div style="flex:1"><div style="font-size:16px;font-weight:700">'+c.name+'</div>'
     + '<div style="font-size:12px;color:var(--text-3);margin-top:2px">'+phoneAddr+'</div></div>'
-    + '<button class="btn btn-outline btn-sm" onclick="closeModal('modal-order');editCustomer(''+key+'')">✏️ Sửa</button></div>'
+    + `<button class="btn btn-outline btn-sm" onclick="closeModal('modal-order');editCustomer('${key}')">✏️ Sửa</button></div>`
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">'
     + '<div class="stat-card" style="padding:10px 14px"><div class="stat-label">Tổng đơn</div><div class="stat-value" style="font-size:20px">'+orders.length+'</div></div>'
     + '<div class="stat-card green" style="padding:10px 14px"><div class="stat-label">Tổng chi tiêu</div><div class="stat-value" style="font-size:16px">'+fmt(totalSpent)+'</div></div>'
