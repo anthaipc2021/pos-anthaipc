@@ -1353,13 +1353,40 @@ window.viewCustomerOrders = (key) => {
     .sort((a,b) => (b[1].createdAt||0) - (a[1].createdAt||0));
   const totalSpent = orders.reduce((s,[,o]) => s+(o.total||0), 0);
   const totalOrders = orders.length;
+  const hasDebt = (c.debt||0) > 0;
+  const debtCardClass = hasDebt ? 'stat-card red' : 'stat-card';
+  const debtColor = hasDebt ? 'var(--red)' : 'var(--green)';
+  const phoneAddr = (c.phone||'Chưa có SĐT') + (c.address ? ' · ' + c.address : '');
 
-  document.getElementById('modal-order-body').innerHTML = `
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+  const ordersHtml = orders.length ? `
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text-2)">📋 Lịch sử đơn hàng</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:var(--bg)">
+        <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Mã đơn</th>
+        <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Thời gian</th>
+        <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Tổng tiền</th>
+        <th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">SP</th>
+        <th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)"></th>
+      </tr></thead>
+      <tbody>` +
+        orders.map(([k,o]) =>
+          `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeModal('modal-order');setTimeout(()=>viewOrderFromKey('${k}'),100)">
+            <td style="padding:8px;font-weight:700;font-family:monospace;color:var(--blue)">${o.code||k.slice(0,8)}</td>
+            <td style="padding:8px;font-size:12px;color:var(--text-3)">${fmtDate(o.createdAt)}</td>
+            <td style="padding:8px;text-align:right;font-weight:700;color:var(--blue)">${fmt(o.total)}</td>
+            <td style="padding:8px;text-align:center;font-size:12px;color:var(--text-3)">${(o.items||[]).length}</td>
+            <td style="padding:8px;text-align:center"><span style="color:var(--blue);font-size:12px">👁</span></td>
+          </tr>`
+        ).join('') +
+      `</tbody></table>`
+    : `<div class="empty-state" style="padding:32px"><div class="icon">🛒</div>Khách hàng này chưa có đơn hàng nào</div>`;
+
+  document.getElementById('modal-order-body').innerHTML =
+    `<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">
       <div style="width:44px;height:44px;border-radius:50%;background:var(--blue-light);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--blue-dark);flex-shrink:0">${(c.name||'?')[0].toUpperCase()}</div>
       <div style="flex:1">
         <div style="font-size:16px;font-weight:700">${c.name}</div>
-        <div style="font-size:12px;color:var(--text-3);margin-top:2px">${c.phone||'Chưa có SĐT'}${c.address?' · '+c.address:''}</div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:2px">${phoneAddr}</div>
       </div>
       <button class="btn btn-outline btn-sm" onclick="closeModal('modal-order');editCustomer('${key}')">✏️ Sửa</button>
     </div>
@@ -1372,32 +1399,12 @@ window.viewCustomerOrders = (key) => {
         <div class="stat-label">Tổng chi tiêu</div>
         <div class="stat-value" style="font-size:16px">${fmt(totalSpent)}</div>
       </div>
-      <div class="stat-card ${(c.debt||0)>0?'red':''}" style="padding:10px 14px">
+      <div class="${debtCardClass}" style="padding:10px 14px">
         <div class="stat-label">Công nợ</div>
-        <div class="stat-value" style="font-size:16px;color:${(c.debt||0)>0?'var(--red)':'var(--green)'}">${fmt(c.debt||0)}</div>
+        <div class="stat-value" style="font-size:16px;color:${debtColor}">${fmt(c.debt||0)}</div>
       </div>
-    </div>
-    ${orders.length ? `
-    <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text-2)">📋 Lịch sử đơn hàng</div>
-    <table style="width:100%;border-collapse:collapse;font-size:13px">
-      <thead><tr style="background:var(--bg)">
-        <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Mã đơn</th>
-        <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Thời gian</th>
-        <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Tổng tiền</th>
-        <th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">SP</th>
-        <th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)"></th>
-      </tr></thead>
-      <tbody>
-        ${orders.map(([k,o])=>`
-        <tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeModal('modal-order');setTimeout(()=>viewOrderFromKey('${k}'),100)">
-          <td style="padding:8px;font-weight:700;font-family:monospace;color:var(--blue)">${o.code||k.slice(0,8)}</td>
-          <td style="padding:8px;font-size:12px;color:var(--text-3)">${fmtDate(o.createdAt)}</td>
-          <td style="padding:8px;text-align:right;font-weight:700;color:var(--blue)">${fmt(o.total)}</td>
-          <td style="padding:8px;text-align:center;font-size:12px;color:var(--text-3)">${(o.items||[]).length}</td>
-          <td style="padding:8px;text-align:center"><span style="color:var(--blue);font-size:12px">👁</span></td>
-        </tr>`).join('')}
-      </tbody>
-    </table>` : `<div class="empty-state" style="padding:32px"><div class="icon">🛒</div>Khách hàng này chưa có đơn hàng nào</div>`}`;
+    </div>` + ordersHtml;
+
   document.getElementById('modal-order').classList.add('open');
 };
 
