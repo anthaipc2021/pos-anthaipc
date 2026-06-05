@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)file:///C:/Users/TVH%20386/Downloads/index_3.html -->
+<!-- saved from url=(0047)file:///C:/Users/TVH%20386/Downloads/index.html -->
 <html lang="vi"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -467,6 +467,7 @@ let allProducts = {};
 let allCustomers = {};
 let allSuppliers = {};
 let allOrders = {};
+let allImportReceipts = {};
 let cart = [];
 let selectedCustomer = null;
 let editingOrderKey = null;
@@ -504,16 +505,18 @@ onAuthStateChanged(auth, user => {
 
 // ── DATA LOAD ──
 async function loadAllData() {
-  const [pSnap, cSnap, sSnap, oSnap] = await Promise.all([
+  const [pSnap, cSnap, sSnap, oSnap, iSnap] = await Promise.all([
     get(ref(db, 'products')),
     get(ref(db, 'customers')),
     get(ref(db, 'suppliers')),
-    get(ref(db, 'orders'))
+    get(ref(db, 'orders')),
+    get(ref(db, 'importReceipts'))
   ]);
   allProducts = pSnap.val() || {};
   allCustomers = cSnap.val() || {};
   allSuppliers = sSnap.val() || {};
   allOrders = oSnap.val() || {};
+  allImportReceipts = iSnap.val() || {};
   navigate('dashboard');
 }
 
@@ -565,8 +568,9 @@ window.toast = (msg, type='') => {
 window.closeModal = id => document.getElementById(id).classList.remove('open');
 
 // ── DASHBOARD ──
-let dashPeriod = 'month'; // default: tháng này
-let dashCustomFrom = ''; let dashCustomTo = '';
+let dashPeriod = 'month';
+let dashCustomFrom = '';
+let dashCustomTo = '';
 
 function getDashRange() {
   const now = new Date();
@@ -591,30 +595,30 @@ function getDashRange() {
   return { from, to };
 }
 
-const dashPeriodLabels = {today:'Hôm Nay', yesterday:'Hôm Qua', week:'Tuần Này', month:'Tháng Này', all:'Tất Cả', custom:'Tùy Chỉnh'};
+const dashPeriodLabels = {today:'Hôm Nay', yesterday:'Hôm Qua', week:'Tuần Này', month:'Tháng Này', all:'Tất Cả'};
 
-window.setDashPeriod = (p) => { dashPeriod = p; refreshDashboard(); };
+window.setDashPeriod = (p) => {
+  dashPeriod = p;
+  renderDashboard(document.getElementById('main-content'), document.getElementById('topbar-actions'));
+};
 window.setDashCustom = () => {
   dashCustomFrom = document.getElementById('dash-from')?.value || '';
   dashCustomTo = document.getElementById('dash-to')?.value || '';
-  if (dashCustomFrom) { dashPeriod = 'custom'; refreshDashboard(); }
+  if (dashCustomFrom) {
+    dashPeriod = 'custom';
+    renderDashboard(document.getElementById('main-content'), document.getElementById('topbar-actions'));
+  }
 };
-
-function refreshDashboard() {
-  renderDashboard(document.getElementById('main-content'), document.getElementById('topbar-actions'));
-}
 
 function renderDashboard(content, actions) {
   const prods = Object.values(allProducts);
   const orders = Object.values(allOrders);
   const { from, to } = getDashRange();
 
-  // Filtered orders for selected period
   const filteredOrders = orders.filter(o => o.createdAt >= from && o.createdAt <= to);
   const revenue = filteredOrders.reduce((s,o)=>s+(o.total||0),0);
   const profit = filteredOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
 
-  // Always show today stats in sub-cards
   const today = new Date(); today.setHours(0,0,0,0);
   const todayOrders = orders.filter(o => o.createdAt >= today.getTime());
   const todayRevenue = todayOrders.reduce((s,o)=>s+(o.total||0),0);
@@ -624,11 +628,10 @@ function renderDashboard(content, actions) {
   const lowStock = prods.filter(p=>(p.stock||0)>0&&(p.stock||0)<=3).length;
   const outStock = prods.filter(p=>p.name&&(p.stock||0)===0).length;
 
-  // Top products by profit in selected period
   const salesMap = {};
   filteredOrders.forEach(o=>(o.items||[]).forEach(i=>{
-    const importPrice = allProducts[i.key]?.importPrice || 0;
-    const pft = (i.price - importPrice) * i.qty;
+    const imp = allProducts[i.key]?.importPrice || 0;
+    const pft = (i.price - imp) * i.qty;
     if(!salesMap[i.name]) salesMap[i.name]={name:i.name,qty:0,revenue:0,profit:0};
     salesMap[i.name].qty+=i.qty;
     salesMap[i.name].revenue+=i.subtotal||i.price*i.qty;
@@ -636,7 +639,6 @@ function renderDashboard(content, actions) {
   }));
   const topProducts = Object.values(salesMap).sort((a,b)=>b.profit-a.profit).slice(0,5);
 
-  // Chart data - last 30 days (fixed, không đổi theo filter)
   const chartDays = 30;
   const chartData = Array.from({length:chartDays},(_,i)=>{
     const d = new Date(); d.setDate(d.getDate()-chartDays+1+i); d.setHours(0,0,0,0);
@@ -650,7 +652,6 @@ function renderDashboard(content, actions) {
   });
 
   const periodLabel = dashPeriodLabels[dashPeriod] || 'Tùy Chỉnh';
-  const periods = ['today','yesterday','week','month','all'];
 
   actions.innerHTML = `
     <div class="flex-gap">
@@ -659,7 +660,9 @@ function renderDashboard(content, actions) {
       <button class="btn btn-outline" onclick="navigate('warranty')">🔧 Bảo hành</button>
     </div>`;
 
-  // Period filter bar — rendered inside content before stats
+  const maxRev = Math.max(...chartData.map(d=>d.rev), 1);
+  const periods = ['today','yesterday','week','month','all'];
+
   const filterBar = `
   <div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;flex-wrap:wrap">
     ${periods.map(p=>`<button onclick="setDashPeriod('${p}')" style="padding:6px 14px;border-radius:20px;border:1.5px solid ${dashPeriod===p?'var(--blue)':'var(--border)'};background:${dashPeriod===p?'var(--blue)':'#fff'};color:${dashPeriod===p?'#fff':'var(--text-2)'};font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">${dashPeriodLabels[p]}</button>`).join('')}
@@ -669,8 +672,6 @@ function renderDashboard(content, actions) {
       <input type="date" id="dash-to" value="${dashCustomTo}" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:8px" onchange="setDashCustom()">
     </div>
   </div>`;
-
-  const maxRev = Math.max(...chartData.map(d=>d.rev), 1);
 
   content.innerHTML = filterBar + `
   <!-- STATS ROW -->
@@ -709,7 +710,6 @@ function renderDashboard(content, actions) {
 
   <!-- CHART + TOP PRODUCTS -->
   <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;margin-bottom:18px">
-    <!-- CHART -->
     <div class="table-wrap" style="padding:18px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
         <div style="font-size:14px;font-weight:700">📈 Doanh thu & Lợi nhuận — 30 ngày gần nhất</div>
@@ -718,27 +718,25 @@ function renderDashboard(content, actions) {
           <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:3px;background:var(--green);display:inline-block;border-radius:2px"></span>Lợi nhuận</span>
         </div>
       </div>
-      <div style="height:180px;display:flex;align-items:flex-end;gap:3px;padding-bottom:24px;position:relative">
-        <!-- Y axis hint -->
-        <div style="position:absolute;top:0;left:0;right:0;height:1px;background:var(--border);"></div>
+      <div style="height:180px;display:flex;align-items:flex-end;gap:2px;padding-bottom:24px;position:relative">
+        <div style="position:absolute;top:0;left:0;right:0;height:1px;background:var(--border)"></div>
         <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:var(--border);opacity:.5"></div>
         <div style="position:absolute;top:0;left:-4px;font-size:10px;color:var(--text-3);transform:translateY(-50%)">${fmtShort(maxRev)}</div>
         ${chartData.map((d,i)=>{
           const revH = maxRev>0 ? Math.round((d.rev/maxRev)*140) : 0;
           const profH = maxRev>0 ? Math.round((Math.max(0,d.profit)/maxRev)*140) : 0;
           const isToday = i===chartDays-1;
-          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;position:relative">
-            <div style="width:100%;display:flex;align-items:flex-end;justify-content:center;gap:1px;height:140px">
-              <div style="width:45%;background:${isToday?'var(--blue)':'rgba(26,111,212,0.35)'};height:${revH}px;border-radius:2px 2px 0 0;transition:height .3s" title="DT: ${fmt(d.rev)}"></div>
-              <div style="width:45%;background:${isToday?'var(--green)':'rgba(22,163,74,0.4)'};height:${profH}px;border-radius:2px 2px 0 0;transition:height .3s" title="LN: ${fmt(d.profit)}"></div>
-            </div>
-            <div style="font-size:9px;color:${isToday?'var(--blue)':'var(--text-3)'};font-weight:${isToday?'700':'400'};white-space:nowrap;position:absolute;bottom:-18px">${d.label}</div>
-          </div>`;
+          return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;position:relative">'
+            +'<div style="width:100%;display:flex;align-items:flex-end;justify-content:center;gap:1px;height:140px">'
+            +'<div style="width:45%;background:'+(isToday?'var(--blue)':'rgba(26,111,212,0.35)')+';height:'+revH+'px;border-radius:2px 2px 0 0" title="DT: '+fmt(d.rev)+'"></div>'
+            +'<div style="width:45%;background:'+(isToday?'var(--green)':'rgba(22,163,74,0.4)')+';height:'+profH+'px;border-radius:2px 2px 0 0" title="LN: '+fmt(d.profit)+'"></div>'
+            +'</div>'
+            +'<div style="font-size:9px;color:'+(isToday?'var(--blue)':'var(--text-3)')+';font-weight:'+(isToday?'700':'400')+';white-space:nowrap;position:absolute;bottom:-18px">'+d.label+'</div>'
+            +'</div>';
         }).join('')}
       </div>
     </div>
 
-    <!-- TOP PRODUCTS -->
     <div class="table-wrap">
       <div class="table-header"><span class="table-title">💰 Top lợi nhuận · ${periodLabel}</span></div>
       ${topProducts.length ? topProducts.map((p,i)=>`
@@ -746,10 +744,10 @@ function renderDashboard(content, actions) {
         <div style="width:22px;height:22px;border-radius:50%;background:${i===0?'#FFA000':i===1?'#90A4AE':i===2?'#CD7F32':'var(--blue-light)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${i<3?'#fff':'var(--blue)'};flex-shrink:0">${i+1}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
-          <div style="font-size:11px;color:var(--text-3)">${fmt(p.revenue)}</div>
+          <div style="font-size:11px;color:var(--text-3)">${p.qty} cái · DT: ${fmt(p.revenue)}</div>
         </div>
-        <div style="font-size:12px;font-weight:700;color:var(--blue);white-space:nowrap">${p.qty} cái</div>
-      </div>`).join('') : `<div class="empty-state" style="padding:30px"><div class="icon">📊</div>Chưa có dữ liệu</div>`}
+        <div style="font-size:12px;font-weight:700;color:var(--green);white-space:nowrap">+${fmt(p.profit)}</div>
+      </div>`).join('') : '<div class="empty-state" style="padding:30px"><div class="icon">📊</div>Chưa có dữ liệu</div>'}
     </div>
   </div>
 
@@ -762,7 +760,7 @@ function renderDashboard(content, actions) {
         <tbody>
           ${orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(o=>`
           <tr onclick="viewOrderFromKey('${Object.keys(allOrders).find(k=>allOrders[k]===o)}')" style="cursor:pointer">
-            <td class="mono" style="font-weight:700">${o.code||'--'}</td>
+            <td class="mono" style="font-weight:700;color:var(--blue)">${o.code||'--'}</td>
             <td style="font-size:11px;color:var(--text-3)">${timeAgo(o.createdAt)}</td>
             <td>${o.customerName||'Khách lẻ'}</td>
             <td style="text-align:right" class="price-tag">${fmt(o.total)}</td>
@@ -771,17 +769,17 @@ function renderDashboard(content, actions) {
       </table>
     </div>
     <div class="table-wrap">
-      <div class="table-header"><span class="table-title">⚠️ Hàng sắp hết / hết kho</span><button class="btn btn-outline btn-sm" onclick="navigate('inventory')">Xem kho</button></div>
+      <div class="table-header"><span class="table-title">📥 Lịch sử nhập hàng gần nhất</span><button class="btn btn-outline btn-sm" onclick="navigate('import')">Nhập hàng</button></div>
       <table>
-        <thead><tr><th>Sản phẩm</th><th>Nhóm</th><th style="text-align:center">Tồn</th><th style="text-align:right">Giá bán</th></tr></thead>
+        <thead><tr><th>Thời gian</th><th>Nhà cung cấp</th><th style="text-align:center">Số SP</th><th style="text-align:right">Tổng nhập</th></tr></thead>
         <tbody>
-          ${prods.filter(p=>p.name&&(p.stock||0)<=3).sort((a,b)=>(a.stock||0)-(b.stock||0)).slice(0,6).map(p=>`
+          ${Object.values(allImportReceipts).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(r=>`
           <tr>
-            <td style="font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</td>
-            <td style="font-size:11px;color:var(--text-3)">${p.group||'--'}</td>
-            <td style="text-align:center"><span class="${(p.stock||0)===0?'stock-zero':'stock-low'}">${p.stock||0}</span></td>
-            <td style="text-align:right" class="price-tag">${fmt(p.price)}</td>
-          </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px" class="text-success">✅ Tồn kho ổn định</td></tr>'}
+            <td style="font-size:11px;color:var(--text-3)">${timeAgo(r.createdAt)}</td>
+            <td style="font-weight:500">${r.supplierName||'Không rõ'}</td>
+            <td style="text-align:center">${(r.items||[]).reduce((s,i)=>s+i.qty,0)}</td>
+            <td style="text-align:right" class="price-tag">${fmt(r.total)}</td>
+          </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-3)">Chưa có phiếu nhập nào</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -1256,15 +1254,15 @@ window.filterOrders = () => {
       <thead><tr><th>Mã đơn</th><th>Thời gian</th><th>Khách hàng</th><th>SĐT</th><th style="text-align:right">Tổng tiền</th><th>Sản phẩm</th><th style="text-align:center">Thao tác</th></tr></thead>
       <tbody>
         ${slice.map(([k,o])=>`
-        <tr>
-          <td class="mono" style="font-weight:700">${o.code||k.slice(0,8)}</td>
+        <tr onclick="viewOrder('${k}')" style="cursor:pointer">
+          <td class="mono" style="font-weight:700;color:var(--blue);text-decoration:underline;text-underline-offset:3px">${o.code||k.slice(0,8)}</td>
           <td style="font-size:12px;color:var(--text-3)">${fmtDate(o.createdAt)}</td>
           <td>${o.customerName||'Khách lẻ'}</td>
           <td style="font-size:12px">${o.customerPhone||'--'}</td>
           <td style="text-align:right" class="price-tag">${fmt(o.total)}</td>
           <td style="font-size:12px;color:var(--text-3)">${(o.items||[]).length} sản phẩm</td>
           <td style="text-align:center">
-            <button class="btn btn-outline btn-sm" onclick="viewOrder('${k}')">👁 Xem</button>
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewOrder('${k}')">👁 Xem</button>
           </td>
         </tr>`).join('')||'<tr><td colspan="7" class="empty-state">Chưa có đơn hàng nào</td></tr>'}
       </tbody>
@@ -1350,15 +1348,15 @@ window.filterCustomers = () => {
       <thead><tr><th>#</th><th>Tên khách hàng</th><th>Số điện thoại</th><th>Địa chỉ</th><th style="text-align:right">Công nợ</th><th style="text-align:center">Thao tác</th></tr></thead>
       <tbody>
         ${slice.map(([k,c],i)=>`
-        <tr>
+        <tr onclick="viewCustomerOrders('${k}')" style="cursor:pointer">
           <td class="text-muted">${(custPage-1)*custPerPage+i+1}</td>
-          <td style="font-weight:600">${c.name}</td>
+          <td style="font-weight:600;color:var(--blue)">${c.name}</td>
           <td>${c.phone||'--'}</td>
           <td style="font-size:12px;color:var(--text-3)">${c.address||'--'}</td>
           <td style="text-align:right" class="${(c.debt||0)>0?'text-danger':'text-success'}">${fmt(c.debt||0)}</td>
           <td style="text-align:center">
-            <button class="btn btn-outline btn-sm" onclick="editCustomer('${k}')">✏️</button>
-            <button class="btn btn-sm" style="background:var(--red-light);color:var(--red)" onclick="deleteCustomer('${k}','${c.name.replace(/'/g,"\\'")}')">🗑</button>
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();editCustomer('${k}')">✏️</button>
+            <button class="btn btn-sm" style="background:var(--red-light);color:var(--red)" onclick="event.stopPropagation();deleteCustomer('${k}','${c.name.replace(/'/g,"\\'")}')">🗑</button>
           </td>
         </tr>`).join('')||'<tr><td colspan="6" class="empty-state">Không tìm thấy khách hàng</td></tr>'}
       </tbody>
@@ -1406,6 +1404,56 @@ window.deleteCustomer = async (key,name) => {
   delete allCustomers[key];
   toast('Đã xóa khách hàng','success');
   filterCustomers();
+};
+
+window.viewCustomerOrders = (key) => {
+  const c = allCustomers[key]; if(!c) return;
+  const orders = Object.entries(allOrders)
+    .filter(([,o]) => o.customerKey === key)
+    .sort((a,b) => (b[1].createdAt||0) - (a[1].createdAt||0));
+  const totalSpent = orders.reduce((s,[,o]) => s+(o.total||0), 0);
+  const hasDebt = (c.debt||0) > 0;
+  const debtCardClass = hasDebt ? 'stat-card red' : 'stat-card';
+  const debtColor = hasDebt ? 'var(--red)' : 'var(--green)';
+  const phoneAddr = (c.phone||'Chưa có SĐT') + (c.address ? ' · ' + c.address : '');
+
+  const ordersHtml = orders.length
+    ? '<div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text-2)">📋 Lịch sử đơn hàng</div>'
+      + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
+      + '<thead><tr style="background:var(--bg)">'
+      + '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Mã đơn</th>'
+      + '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Thời gian</th>'
+      + '<th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Tổng tiền</th>'
+      + '<th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">SP</th>'
+      + '<th style="padding:8px;border-bottom:1px solid var(--border)"></th>'
+      + '</tr></thead><tbody>'
+      + orders.map(([k,o]) =>
+          '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeModal(\'modal-order\');setTimeout(()=>viewOrderFromKey(\''+k+'\'),100)">'
+          + '<td style="padding:8px;font-weight:700;font-family:monospace;color:var(--blue)">'+(o.code||k.slice(0,8))+'</td>'
+          + '<td style="padding:8px;font-size:12px;color:var(--text-3)">'+fmtDate(o.createdAt)+'</td>'
+          + '<td style="padding:8px;text-align:right;font-weight:700;color:var(--blue)">'+fmt(o.total)+'</td>'
+          + '<td style="padding:8px;text-align:center;font-size:12px;color:var(--text-3)">'+(o.items||[]).length+'</td>'
+          + '<td style="padding:8px;text-align:center"><span style="color:var(--blue);font-size:12px">👁</span></td>'
+          + '</tr>'
+        ).join('')
+      + '</tbody></table>'
+    : '<div class="empty-state" style="padding:32px"><div class="icon">🛒</div>Khách hàng này chưa có đơn hàng nào</div>';
+
+  document.getElementById('modal-order-body').innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">'
+    + '<div style="width:44px;height:44px;border-radius:50%;background:var(--blue-light);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--blue-dark);flex-shrink:0">'+(c.name||'?')[0].toUpperCase()+'</div>'
+    + '<div style="flex:1"><div style="font-size:16px;font-weight:700">'+c.name+'</div>'
+    + '<div style="font-size:12px;color:var(--text-3);margin-top:2px">'+phoneAddr+'</div></div>'
+    + '<button class="btn btn-outline btn-sm" onclick="closeModal(\'modal-order\');editCustomer(\''+key+'\')">✏️ Sửa</button>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">'
+    + '<div class="stat-card" style="padding:10px 14px"><div class="stat-label">Tổng đơn</div><div class="stat-value" style="font-size:20px">'+orders.length+'</div></div>'
+    + '<div class="stat-card green" style="padding:10px 14px"><div class="stat-label">Tổng chi tiêu</div><div class="stat-value" style="font-size:16px">'+fmt(totalSpent)+'</div></div>'
+    + '<div class="'+debtCardClass+'" style="padding:10px 14px"><div class="stat-label">Công nợ</div><div class="stat-value" style="font-size:16px;color:'+debtColor+'">'+fmt(c.debt||0)+'</div></div>'
+    + '</div>'
+    + ordersHtml;
+
+  document.getElementById('modal-order').classList.add('open');
 };
 
 // ── SUPPLIERS ──
@@ -1546,6 +1594,7 @@ window.createImportReceipt = async () => {
   const rRef=push(ref(db,'importReceipts'));
   updates['importReceipts/'+rRef.key]=receipt;
   await update(ref(db),updates);
+  allImportReceipts[rRef.key] = receipt;
   toast('Nhập hàng thành công! '+importCart.reduce((s,i)=>s+i.qty,0)+' sản phẩm','success');
   importCart=[];
   renderImport(document.getElementById('main-content'), document.getElementById('topbar-actions'));
