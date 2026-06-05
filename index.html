@@ -676,7 +676,7 @@ function renderDashboard(content, actions) {
 
   const maxRev = Math.max(...chartData.map(d=>d.rev), 1);
   const filterBar = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;flex-wrap:wrap">'
-    + periods.map(p=>'<button onclick="setDashPeriod(''+p+'')" style="padding:6px 14px;border-radius:20px;border:1.5px solid '+(dashPeriod===p?'var(--blue)':'var(--border)')+';background:'+(dashPeriod===p?'var(--blue)':'#fff')+';color:'+(dashPeriod===p?'#fff':'var(--text-2)')+';font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">'+dashPeriodLabels[p]+'</button>').join('')
+    + periods.map(p=>`<button onclick="setDashPeriod('${p}')" style="padding:6px 14px;border-radius:20px;border:1.5px solid ${dashPeriod===p?'var(--blue)':'var(--border)'};background:${dashPeriod===p?'var(--blue)':'#fff'};color:${dashPeriod===p?'#fff':'var(--text-2)'};font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">${dashPeriodLabels[p]}</button>`).join('')
     + '<div style="display:flex;align-items:center;gap:6px;margin-left:4px">'
     + '<input type="date" id="dash-from" value="'+dashCustomFrom+'" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:8px" onchange="setDashCustom()">'
     + '<span style="color:var(--text-3);font-size:13px">→</span>'
