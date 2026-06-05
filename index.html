@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- saved from url=(0047)file:///C:/Users/TVH%20386/Downloads/index.html -->
+<!-- saved from url=(0049)file:///C:/Users/TVH%20386/Downloads/index_2.html -->
 <html lang="vi"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -423,6 +423,35 @@
   </div>
 </div>
 
+<!-- MODAL SUPPLIER -->
+<div class="modal-overlay" id="modal-supplier">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-supplier-title">Thêm nhà cung cấp</h3>
+      <button class="btn-close" onclick="closeModal(&#39;modal-supplier&#39;)">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group"><label>Tên nhà cung cấp *</label><input type="text" id="s-name" placeholder="Nhập tên nhà cung cấp"></div>
+      <div class="form-row">
+        <div class="form-group"><label>Số điện thoại</label><input type="text" id="s-phone" placeholder="0xxx..."></div>
+        <div class="form-group"><label>Địa chỉ</label><input type="text" id="s-address" placeholder="Địa chỉ (tùy chọn)"></div>
+      </div>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
+          <input type="checkbox" id="s-iscustomer" style="width:16px;height:16px;cursor:pointer">
+          <span>Đây cũng là khách hàng của tôi</span>
+        </label>
+        <div style="font-size:11px;color:var(--text-3);margin-top:4px;margin-left:24px">Sẽ được thêm vào danh sách khách hàng và có thể chọn khi tạo đơn bán hàng</div>
+      </div>
+      <input type="hidden" id="s-key">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal(&#39;modal-supplier&#39;)">Hủy</button>
+      <button class="btn btn-primary" onclick="saveSupplier()">💾 Lưu</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL ORDER DETAIL -->
 <div class="modal-overlay" id="modal-order">
   <div class="modal" style="max-width:600px;">
@@ -589,9 +618,7 @@ function getDashRange() {
   } else if (dashPeriod === 'custom' && dashCustomFrom) {
     from = new Date(dashCustomFrom).getTime();
     to = dashCustomTo ? new Date(dashCustomTo).getTime() + 86400000 - 1 : Date.now();
-  } else {
-    from = 0;
-  }
+  } else { from = 0; }
   return { from, to };
 }
 
@@ -604,54 +631,42 @@ window.setDashPeriod = (p) => {
 window.setDashCustom = () => {
   dashCustomFrom = document.getElementById('dash-from')?.value || '';
   dashCustomTo = document.getElementById('dash-to')?.value || '';
-  if (dashCustomFrom) {
-    dashPeriod = 'custom';
-    renderDashboard(document.getElementById('main-content'), document.getElementById('topbar-actions'));
-  }
+  if (dashCustomFrom) { dashPeriod = 'custom'; renderDashboard(document.getElementById('main-content'), document.getElementById('topbar-actions')); }
 };
 
 function renderDashboard(content, actions) {
   const prods = Object.values(allProducts);
   const orders = Object.values(allOrders);
   const { from, to } = getDashRange();
-
   const filteredOrders = orders.filter(o => o.createdAt >= from && o.createdAt <= to);
   const revenue = filteredOrders.reduce((s,o)=>s+(o.total||0),0);
   const profit = filteredOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
-
   const today = new Date(); today.setHours(0,0,0,0);
   const todayOrders = orders.filter(o => o.createdAt >= today.getTime());
   const todayRevenue = todayOrders.reduce((s,o)=>s+(o.total||0),0);
   const todayProfit = todayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
-
   const totalStock = prods.reduce((s,p)=>s+(p.avgPrice||p.importPrice||0)*(p.stock||0),0);
   const lowStock = prods.filter(p=>(p.stock||0)>0&&(p.stock||0)<=3).length;
   const outStock = prods.filter(p=>p.name&&(p.stock||0)===0).length;
-
   const salesMap = {};
   filteredOrders.forEach(o=>(o.items||[]).forEach(i=>{
-    const imp = allProducts[i.key]?.importPrice || 0;
-    const pft = (i.price - imp) * i.qty;
+    const imp = allProducts[i.key]?.importPrice||0;
+    const pft = (i.price-imp)*i.qty;
     if(!salesMap[i.name]) salesMap[i.name]={name:i.name,qty:0,revenue:0,profit:0};
-    salesMap[i.name].qty+=i.qty;
-    salesMap[i.name].revenue+=i.subtotal||i.price*i.qty;
-    salesMap[i.name].profit+=pft;
+    salesMap[i.name].qty+=i.qty; salesMap[i.name].revenue+=i.subtotal||i.price*i.qty; salesMap[i.name].profit+=pft;
   }));
   const topProducts = Object.values(salesMap).sort((a,b)=>b.profit-a.profit).slice(0,5);
-
   const chartDays = 30;
   const chartData = Array.from({length:chartDays},(_,i)=>{
     const d = new Date(); d.setDate(d.getDate()-chartDays+1+i); d.setHours(0,0,0,0);
     const next = new Date(d); next.setDate(next.getDate()+1);
     const dayOrders = orders.filter(o=>o.createdAt>=d.getTime()&&o.createdAt<next.getTime());
-    return {
-      label: String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'),
-      rev: dayOrders.reduce((s,o)=>s+(o.total||0),0),
-      profit: dayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0)
-    };
+    return { label:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'),
+      rev:dayOrders.reduce((s,o)=>s+(o.total||0),0),
+      profit:dayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0) };
   });
-
-  const periodLabel = dashPeriodLabels[dashPeriod] || 'Tùy Chỉnh';
+  const periodLabel = dashPeriodLabels[dashPeriod]||'Tùy Chỉnh';
+  const periods = ['today','yesterday','week','month','all'];
 
   actions.innerHTML = `
     <div class="flex-gap">
@@ -661,54 +676,23 @@ function renderDashboard(content, actions) {
     </div>`;
 
   const maxRev = Math.max(...chartData.map(d=>d.rev), 1);
-  const periods = ['today','yesterday','week','month','all'];
-
-  const filterBar = `
-  <div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;flex-wrap:wrap">
-    ${periods.map(p=>`<button onclick="setDashPeriod('${p}')" style="padding:6px 14px;border-radius:20px;border:1.5px solid ${dashPeriod===p?'var(--blue)':'var(--border)'};background:${dashPeriod===p?'var(--blue)':'#fff'};color:${dashPeriod===p?'#fff':'var(--text-2)'};font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">${dashPeriodLabels[p]}</button>`).join('')}
-    <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
-      <input type="date" id="dash-from" value="${dashCustomFrom}" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:8px" onchange="setDashCustom()">
-      <span style="color:var(--text-3);font-size:13px">→</span>
-      <input type="date" id="dash-to" value="${dashCustomTo}" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:8px" onchange="setDashCustom()">
-    </div>
-  </div>`;
+  const filterBar = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;flex-wrap:wrap">'
+    + periods.map(p=>'<button onclick="setDashPeriod(''+p+'')" style="padding:6px 14px;border-radius:20px;border:1.5px solid '+(dashPeriod===p?'var(--blue)':'var(--border)')+';background:'+(dashPeriod===p?'var(--blue)':'#fff')+';color:'+(dashPeriod===p?'#fff':'var(--text-2)')+';font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">'+dashPeriodLabels[p]+'</button>').join('')
+    + '<div style="display:flex;align-items:center;gap:6px;margin-left:4px">'
+    + '<input type="date" id="dash-from" value="'+dashCustomFrom+'" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:8px" onchange="setDashCustom()">'
+    + '<span style="color:var(--text-3);font-size:13px">→</span>'
+    + '<input type="date" id="dash-to" value="'+dashCustomTo+'" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:8px" onchange="setDashCustom()">'
+    + '</div></div>';
 
   content.innerHTML = filterBar + `
-  <!-- STATS ROW -->
   <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:22px">
-    <div class="stat-card" style="grid-column:span 1">
-      <div class="stat-label">Doanh thu hôm nay</div>
-      <div class="stat-value" style="font-size:18px">${fmt(todayRevenue)}</div>
-      <div class="stat-sub">${todayOrders.length} đơn hàng</div>
-    </div>
-    <div class="stat-card green" style="grid-column:span 1">
-      <div class="stat-label">Lợi nhuận hôm nay</div>
-      <div class="stat-value" style="font-size:18px">${fmt(todayProfit)}</div>
-      <div class="stat-sub">Biên ${todayRevenue?Math.round(todayProfit/todayRevenue*100):0}%</div>
-    </div>
-    <div class="stat-card" style="grid-column:span 1">
-      <div class="stat-label">Doanh thu · ${periodLabel}</div>
-      <div class="stat-value" style="font-size:18px">${fmt(revenue)}</div>
-      <div class="stat-sub">${filteredOrders.length} đơn</div>
-    </div>
-    <div class="stat-card green" style="grid-column:span 1">
-      <div class="stat-label">Lợi nhuận · ${periodLabel}</div>
-      <div class="stat-value" style="font-size:18px">${fmt(profit)}</div>
-      <div class="stat-sub">Biên ${revenue?Math.round(profit/revenue*100):0}%</div>
-    </div>
-    <div class="stat-card orange" style="grid-column:span 1">
-      <div class="stat-label">Giá trị tồn kho</div>
-      <div class="stat-value" style="font-size:18px">${fmt(totalStock)}</div>
-      <div class="stat-sub">${prods.filter(p=>p.name&&(p.stock||0)>0).length} mặt hàng</div>
-    </div>
-    <div class="stat-card red" style="grid-column:span 1">
-      <div class="stat-label">Cảnh báo kho</div>
-      <div class="stat-value" style="font-size:18px">${lowStock+outStock}</div>
-      <div class="stat-sub">${outStock} hết · ${lowStock} sắp hết</div>
-    </div>
+    <div class="stat-card"><div class="stat-label">Doanh thu hôm nay</div><div class="stat-value" style="font-size:18px">${fmt(todayRevenue)}</div><div class="stat-sub">${todayOrders.length} đơn hàng</div></div>
+    <div class="stat-card green"><div class="stat-label">Lợi nhuận hôm nay</div><div class="stat-value" style="font-size:18px">${fmt(todayProfit)}</div><div class="stat-sub">Biên ${todayRevenue?Math.round(todayProfit/todayRevenue*100):0}%</div></div>
+    <div class="stat-card"><div class="stat-label">Doanh thu · ${periodLabel}</div><div class="stat-value" style="font-size:18px">${fmt(revenue)}</div><div class="stat-sub">${filteredOrders.length} đơn</div></div>
+    <div class="stat-card green"><div class="stat-label">Lợi nhuận · ${periodLabel}</div><div class="stat-value" style="font-size:18px">${fmt(profit)}</div><div class="stat-sub">Biên ${revenue?Math.round(profit/revenue*100):0}%</div></div>
+    <div class="stat-card orange"><div class="stat-label">Giá trị tồn kho</div><div class="stat-value" style="font-size:18px">${fmt(totalStock)}</div><div class="stat-sub">${prods.filter(p=>p.name&&(p.stock||0)>0).length} mặt hàng</div></div>
+    <div class="stat-card red"><div class="stat-label">Cảnh báo kho</div><div class="stat-value" style="font-size:18px">${lowStock+outStock}</div><div class="stat-sub">${outStock} hết · ${lowStock} sắp hết</div></div>
   </div>
-
-  <!-- CHART + TOP PRODUCTS -->
   <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;margin-bottom:18px">
     <div class="table-wrap" style="padding:18px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
@@ -723,65 +707,53 @@ function renderDashboard(content, actions) {
         <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:var(--border);opacity:.5"></div>
         <div style="position:absolute;top:0;left:-4px;font-size:10px;color:var(--text-3);transform:translateY(-50%)">${fmtShort(maxRev)}</div>
         ${chartData.map((d,i)=>{
-          const revH = maxRev>0 ? Math.round((d.rev/maxRev)*140) : 0;
-          const profH = maxRev>0 ? Math.round((Math.max(0,d.profit)/maxRev)*140) : 0;
-          const isToday = i===chartDays-1;
+          const revH=maxRev>0?Math.round((d.rev/maxRev)*140):0;
+          const profH=maxRev>0?Math.round((Math.max(0,d.profit)/maxRev)*140):0;
+          const isToday=i===chartDays-1;
           return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;position:relative">'
             +'<div style="width:100%;display:flex;align-items:flex-end;justify-content:center;gap:1px;height:140px">'
             +'<div style="width:45%;background:'+(isToday?'var(--blue)':'rgba(26,111,212,0.35)')+';height:'+revH+'px;border-radius:2px 2px 0 0" title="DT: '+fmt(d.rev)+'"></div>'
             +'<div style="width:45%;background:'+(isToday?'var(--green)':'rgba(22,163,74,0.4)')+';height:'+profH+'px;border-radius:2px 2px 0 0" title="LN: '+fmt(d.profit)+'"></div>'
             +'</div>'
-            +'<div style="font-size:9px;color:'+(isToday?'var(--blue)':'var(--text-3)')+';font-weight:'+(isToday?'700':'400')+';white-space:nowrap;position:absolute;bottom:-18px">'+d.label+'</div>'
+            +'<div style="font-size:9px;color:'+(isToday?'var(--blue)':'var(--text-3)')+';font-weight:'+(isToday?700:400)+';white-space:nowrap;position:absolute;bottom:-18px">'+d.label+'</div>'
             +'</div>';
         }).join('')}
       </div>
     </div>
-
     <div class="table-wrap">
       <div class="table-header"><span class="table-title">💰 Top lợi nhuận · ${periodLabel}</span></div>
       ${topProducts.length ? topProducts.map((p,i)=>`
       <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
         <div style="width:22px;height:22px;border-radius:50%;background:${i===0?'#FFA000':i===1?'#90A4AE':i===2?'#CD7F32':'var(--blue-light)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${i<3?'#fff':'var(--blue)'};flex-shrink:0">${i+1}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
-          <div style="font-size:11px;color:var(--text-3)">${p.qty} cái · DT: ${fmt(p.revenue)}</div>
-        </div>
+        <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div><div style="font-size:11px;color:var(--text-3)">${p.qty} cái · DT: ${fmt(p.revenue)}</div></div>
         <div style="font-size:12px;font-weight:700;color:var(--green);white-space:nowrap">+${fmt(p.profit)}</div>
       </div>`).join('') : '<div class="empty-state" style="padding:30px"><div class="icon">📊</div>Chưa có dữ liệu</div>'}
     </div>
   </div>
-
-  <!-- BOTTOM ROW -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
     <div class="table-wrap">
       <div class="table-header"><span class="table-title">📋 Đơn hàng gần nhất</span><button class="btn btn-outline btn-sm" onclick="navigate('orders')">Xem tất cả</button></div>
-      <table>
-        <thead><tr><th>Mã đơn</th><th>Thời gian</th><th>Khách hàng</th><th style="text-align:right">Tổng tiền</th></tr></thead>
-        <tbody>
-          ${orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(o=>`
-          <tr onclick="viewOrderFromKey('${Object.keys(allOrders).find(k=>allOrders[k]===o)}')" style="cursor:pointer">
-            <td class="mono" style="font-weight:700;color:var(--blue)">${o.code||'--'}</td>
-            <td style="font-size:11px;color:var(--text-3)">${timeAgo(o.createdAt)}</td>
-            <td>${o.customerName||'Khách lẻ'}</td>
-            <td style="text-align:right" class="price-tag">${fmt(o.total)}</td>
-          </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-3)">Chưa có đơn hàng nào</td></tr>'}
-        </tbody>
-      </table>
+      <table><thead><tr><th>Mã đơn</th><th>Thời gian</th><th>Khách hàng</th><th style="text-align:right">Tổng tiền</th></tr></thead>
+      <tbody>${orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(o=>`
+        <tr onclick="viewOrderFromKey('${Object.keys(allOrders).find(k=>allOrders[k]===o)}')" style="cursor:pointer">
+          <td class="mono" style="font-weight:700;color:var(--blue)">${o.code||'--'}</td>
+          <td style="font-size:11px;color:var(--text-3)">${timeAgo(o.createdAt)}</td>
+          <td>${o.customerName||'Khách lẻ'}</td>
+          <td style="text-align:right" class="price-tag">${fmt(o.total)}</td>
+        </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-3)">Chưa có đơn hàng nào</td></tr>'}
+      </tbody></table>
     </div>
     <div class="table-wrap">
       <div class="table-header"><span class="table-title">📥 Lịch sử nhập hàng gần nhất</span><button class="btn btn-outline btn-sm" onclick="navigate('import')">Nhập hàng</button></div>
-      <table>
-        <thead><tr><th>Thời gian</th><th>Nhà cung cấp</th><th style="text-align:center">Số SP</th><th style="text-align:right">Tổng nhập</th></tr></thead>
-        <tbody>
-          ${Object.values(allImportReceipts).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(r=>`
-          <tr>
-            <td style="font-size:11px;color:var(--text-3)">${timeAgo(r.createdAt)}</td>
-            <td style="font-weight:500">${r.supplierName||'Không rõ'}</td>
-            <td style="text-align:center">${(r.items||[]).reduce((s,i)=>s+i.qty,0)}</td>
-            <td style="text-align:right" class="price-tag">${fmt(r.total)}</td>
-          </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-3)">Chưa có phiếu nhập nào</td></tr>'}
-        </tbody>
-      </table>
+      <table><thead><tr><th>Thời gian</th><th>Nhà cung cấp</th><th style="text-align:center">Số SP</th><th style="text-align:right">Tổng nhập</th></tr></thead>
+      <tbody>${Object.values(allImportReceipts).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(r=>`
+        <tr>
+          <td style="font-size:11px;color:var(--text-3)">${timeAgo(r.createdAt)}</td>
+          <td style="font-weight:500">${r.supplierName||'Không rõ'}</td>
+          <td style="text-align:center">${(r.items||[]).reduce((s,i)=>s+i.qty,0)}</td>
+          <td style="text-align:right" class="price-tag">${fmt(r.total)}</td>
+        </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-3)">Chưa có phiếu nhập nào</td></tr>'}
+      </tbody></table>
     </div>
   </div>`;
 }
@@ -944,7 +916,17 @@ window.saveProduct = async () => {
   allProducts[key] = data;
   closeModal('modal-product');
   toast(existing.name ? 'Đã cập nhật sản phẩm' : 'Đã thêm sản phẩm mới', 'success');
-  filterInventory();
+  if (window._importProductCallback) {
+    window._importProductCallback = false;
+    // Tự động thêm SP vừa tạo vào phiếu nhập
+    const existingInCart = importCart.find(c=>c.key===key);
+    if(existingInCart) existingInCart.qty++;
+    else importCart.push({key, name:data.name, importPrice:data.importPrice||0, qty:1});
+    renderImportCart();
+    toast(data.name+' đã thêm vào phiếu nhập','success');
+  } else {
+    filterInventory();
+  }
 };
 
 window.deleteProduct = async (key, name) => {
@@ -1416,43 +1398,34 @@ window.viewCustomerOrders = (key) => {
   const debtCardClass = hasDebt ? 'stat-card red' : 'stat-card';
   const debtColor = hasDebt ? 'var(--red)' : 'var(--green)';
   const phoneAddr = (c.phone||'Chưa có SĐT') + (c.address ? ' · ' + c.address : '');
-
   const ordersHtml = orders.length
     ? '<div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text-2)">📋 Lịch sử đơn hàng</div>'
-      + '<table style="width:100%;border-collapse:collapse;font-size:13px">'
-      + '<thead><tr style="background:var(--bg)">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--bg)">'
       + '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Mã đơn</th>'
       + '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Thời gian</th>'
       + '<th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Tổng tiền</th>'
       + '<th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">SP</th>'
-      + '<th style="padding:8px;border-bottom:1px solid var(--border)"></th>'
-      + '</tr></thead><tbody>'
+      + '<th style="padding:8px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>'
       + orders.map(([k,o]) =>
-          '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeModal(\'modal-order\');setTimeout(()=>viewOrderFromKey(\''+k+'\'),100)">'
+          '<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeModal('modal-order');setTimeout(()=>viewOrderFromKey(''+k+''),100)">'
           + '<td style="padding:8px;font-weight:700;font-family:monospace;color:var(--blue)">'+(o.code||k.slice(0,8))+'</td>'
           + '<td style="padding:8px;font-size:12px;color:var(--text-3)">'+fmtDate(o.createdAt)+'</td>'
           + '<td style="padding:8px;text-align:right;font-weight:700;color:var(--blue)">'+fmt(o.total)+'</td>'
           + '<td style="padding:8px;text-align:center;font-size:12px;color:var(--text-3)">'+(o.items||[]).length+'</td>'
-          + '<td style="padding:8px;text-align:center"><span style="color:var(--blue);font-size:12px">👁</span></td>'
-          + '</tr>'
-        ).join('')
-      + '</tbody></table>'
-    : '<div class="empty-state" style="padding:32px"><div class="icon">🛒</div>Khách hàng này chưa có đơn hàng nào</div>';
-
+          + '<td style="padding:8px;text-align:center"><span style="color:var(--blue)">👁</span></td></tr>'
+        ).join('') + '</tbody></table>'
+    : '<div class="empty-state" style="padding:32px"><div class="icon">🛒</div>Chưa có đơn hàng nào</div>';
   document.getElementById('modal-order-body').innerHTML =
     '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">'
     + '<div style="width:44px;height:44px;border-radius:50%;background:var(--blue-light);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--blue-dark);flex-shrink:0">'+(c.name||'?')[0].toUpperCase()+'</div>'
     + '<div style="flex:1"><div style="font-size:16px;font-weight:700">'+c.name+'</div>'
     + '<div style="font-size:12px;color:var(--text-3);margin-top:2px">'+phoneAddr+'</div></div>'
-    + '<button class="btn btn-outline btn-sm" onclick="closeModal(\'modal-order\');editCustomer(\''+key+'\')">✏️ Sửa</button>'
-    + '</div>'
+    + '<button class="btn btn-outline btn-sm" onclick="closeModal('modal-order');editCustomer(''+key+'')">✏️ Sửa</button></div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">'
     + '<div class="stat-card" style="padding:10px 14px"><div class="stat-label">Tổng đơn</div><div class="stat-value" style="font-size:20px">'+orders.length+'</div></div>'
     + '<div class="stat-card green" style="padding:10px 14px"><div class="stat-label">Tổng chi tiêu</div><div class="stat-value" style="font-size:16px">'+fmt(totalSpent)+'</div></div>'
     + '<div class="'+debtCardClass+'" style="padding:10px 14px"><div class="stat-label">Công nợ</div><div class="stat-value" style="font-size:16px;color:'+debtColor+'">'+fmt(c.debt||0)+'</div></div>'
-    + '</div>'
-    + ordersHtml;
-
+    + '</div>' + ordersHtml;
   document.getElementById('modal-order').classList.add('open');
 };
 
@@ -1462,37 +1435,93 @@ function renderSuppliers(content, actions) {
   const supps = Object.entries(allSuppliers);
   content.innerHTML = `
   <div class="table-wrap">
-    <div class="table-header"><span class="table-title">Nhà cung cấp</span></div>
+    <div class="table-header">
+      <span class="table-title">Nhà cung cấp</span>
+      <span class="text-muted" style="font-size:12px">${fmtN(supps.length)} nhà cung cấp</span>
+    </div>
     <table>
-      <thead><tr><th>#</th><th>Tên nhà cung cấp</th><th>Số điện thoại</th><th>Địa chỉ</th><th style="text-align:right">Công nợ</th><th style="text-align:center">Thao tác</th></tr></thead>
-      <tbody id="supp-body">
+      <thead><tr><th>#</th><th>Tên nhà cung cấp</th><th>Số điện thoại</th><th>Địa chỉ</th><th style="text-align:center">Loại</th><th style="text-align:right">Công nợ</th><th style="text-align:center">Thao tác</th></tr></thead>
+      <tbody>
         ${supps.map(([k,s],i)=>`
         <tr>
           <td class="text-muted">${i+1}</td>
           <td style="font-weight:600">${s.name||k}</td>
           <td>${s.phone||'--'}</td>
           <td style="font-size:12px;color:var(--text-3)">${s.address||'--'}</td>
+          <td style="text-align:center">
+            ${s.isCustomer
+              ? '<span class="badge badge-green" style="font-size:10px">NCC + KH</span>'
+              : '<span class="badge badge-blue" style="font-size:10px">NCC</span>'}
+          </td>
           <td style="text-align:right" class="${(s.debt||0)>0?'text-danger':'text-success'}">${fmt(s.debt||0)}</td>
           <td style="text-align:center">
             <button class="btn btn-outline btn-sm" onclick="editSupplier('${k}')">✏️</button>
+            <button class="btn btn-sm" style="background:var(--red-light);color:var(--red)" onclick="deleteSupplier('${k}','${(s.name||'').replace(/'/g,"\\'")}')">🗑</button>
           </td>
-        </tr>`).join('')||'<tr><td colspan="6" class="empty-state">Chưa có nhà cung cấp nào</td></tr>'}
+        </tr>`).join('')||'<tr><td colspan="7" class="empty-state">Chưa có nhà cung cấp nào</td></tr>'}
       </tbody>
     </table>
   </div>`;
 }
 
-window.openAddSupplier = () => toast('Tính năng thêm NCC đang phát triển', '');
-window.editSupplier = (key) => toast('Tính năng sửa NCC đang phát triển', '');
+window.openAddSupplier = () => {
+  document.getElementById('modal-supplier-title').textContent = 'Thêm nhà cung cấp';
+  ['s-name','s-phone','s-address','s-key'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('s-iscustomer').checked = false;
+  document.getElementById('modal-supplier').classList.add('open');
+};
+window.editSupplier = (key) => {
+  const s = allSuppliers[key]; if(!s) return;
+  document.getElementById('modal-supplier-title').textContent = 'Chỉnh sửa nhà cung cấp';
+  document.getElementById('s-name').value = s.name||'';
+  document.getElementById('s-phone').value = s.phone||'';
+  document.getElementById('s-address').value = s.address||'';
+  document.getElementById('s-iscustomer').checked = !!s.isCustomer;
+  document.getElementById('s-key').value = key;
+  document.getElementById('modal-supplier').classList.add('open');
+};
+window.saveSupplier = async () => {
+  const name = document.getElementById('s-name').value.trim();
+  if(!name){ toast('Vui lòng nhập tên nhà cung cấp','error'); return; }
+  const phone = document.getElementById('s-phone').value.trim();
+  const key = document.getElementById('s-key').value || (phone||genKey(name));
+  const isCustomer = document.getElementById('s-iscustomer').checked;
+  const existing = allSuppliers[key]||{};
+  const data = {...existing, name, phone, address:document.getElementById('s-address').value.trim(), isCustomer, timestamp:Date.now()};
+  await set(ref(db,'suppliers/'+key), data);
+  allSuppliers[key] = data;
+  // Nếu cũng là KH thì thêm vào danh sách khách hàng
+  if(isCustomer) {
+    const cData = {...(allCustomers[key]||{}), name, phone, address:data.address, _isSupplier:true};
+    await set(ref(db,'customers/'+key), cData);
+    allCustomers[key] = cData;
+  }
+  closeModal('modal-supplier');
+  toast('Đã lưu nhà cung cấp','success');
+  navigate('suppliers');
+};
+window.deleteSupplier = async (key,name) => {
+  if(!confirm('Xóa nhà cung cấp "'+name+'"?')) return;
+  await remove(ref(db,'suppliers/'+key));
+  delete allSuppliers[key];
+  toast('Đã xóa nhà cung cấp','success');
+  navigate('suppliers');
+};
 
 // ── IMPORT ──
 function renderImport(content, actions) {
   actions.innerHTML = `<button class="btn btn-primary" onclick="createImportReceipt()">✅ Lưu phiếu nhập</button>`;
+  // Gộp NCC + KH (những người là supplier)
+  const suppOptions = [
+    ...Object.entries(allSuppliers).map(([k,s])=>`<option value="supp_${k}">[NCC] ${s.name}</option>`),
+    ...Object.entries(allCustomers).filter(([k,c])=>c.name).map(([k,c])=>`<option value="cust_${k}">[KH] ${c.name}${c.phone?' · '+c.phone:''}</option>`)
+  ].join('');
   content.innerHTML = `
   <div style="display:grid;grid-template-columns:1fr 360px;gap:16px;height:calc(100vh - var(--header-h) - 40px)">
     <div style="display:flex;flex-direction:column;gap:12px;overflow:hidden">
       <div class="flex-gap">
         <div class="search-box" style="flex:1"><input type="search" id="imp-search" placeholder="Tìm sản phẩm..." style="width:100%" oninput="searchImport(this.value)"></div>
+        <button class="btn btn-outline" onclick="openAddProductFromImport()" title="Tạo sản phẩm mới nhanh" style="white-space:nowrap">+ Tạo SP mới</button>
       </div>
       <div class="product-search-results" id="imp-results">
         <div class="empty-state"><div class="icon">🔍</div>Gõ tên sản phẩm để tìm</div>
@@ -1502,8 +1531,8 @@ function renderImport(content, actions) {
       <div class="cart-header">📦 Phiếu nhập hàng</div>
       <div class="customer-select">
         <select id="imp-supplier" style="width:100%;font-size:13px">
-          <option value="">-- Chọn nhà cung cấp --</option>
-          ${Object.entries(allSuppliers).map(([k,s])=>`<option value="${k}">${s.name}</option>`).join('')}
+          <option value="">-- Chọn NCC / Khách hàng --</option>
+          ${suppOptions}
         </select>
       </div>
       <div class="cart-items" id="imp-items">
@@ -1522,6 +1551,15 @@ function renderImport(content, actions) {
     </div>
   </div>`;
 }
+
+window.openAddProductFromImport = () => {
+  document.getElementById('modal-product-title').textContent = 'Tạo sản phẩm mới';
+  ['p-name','p-import','p-price','p-stock','p-warranty','p-key'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('p-group').value = '';
+  // Callback sau khi lưu: tự động thêm vào phiếu nhập
+  window._importProductCallback = true;
+  document.getElementById('modal-product').classList.add('open');
+};
 
 let importCart = [];
 window.searchImport = (q) => {
@@ -1573,7 +1611,10 @@ window.impRemove=(i)=>{importCart.splice(i,1);renderImportCart();};
 window.createImportReceipt = async () => {
   if(!importCart.length){toast('Chưa có sản phẩm','error');return;}
   const now=Date.now();
-  const suppKey=document.getElementById('imp-supplier')?.value||'';
+  const rawSuppVal=document.getElementById('imp-supplier')?.value||'';
+  let suppKey='', suppName='', suppType='';
+  if(rawSuppVal.startsWith('supp_')){ suppKey=rawSuppVal.slice(5); suppName=allSuppliers[suppKey]?.name||''; suppType='supplier'; }
+  else if(rawSuppVal.startsWith('cust_')){ suppKey=rawSuppVal.slice(5); suppName=allCustomers[suppKey]?.name||''; suppType='customer'; }
   const updates={};
   for(const item of importCart){
     const p=allProducts[item.key]||{};
@@ -1582,12 +1623,10 @@ window.createImportReceipt = async () => {
     updates['products/'+item.key+'/importPrice']=item.importPrice;
     updates['products/'+item.key+'/avgPrice']=item.importPrice;
     updates['products/'+item.key+'/importDate']=new Date(now).toLocaleString('vi-VN');
-    if(suppKey){
-      updates['products/'+item.key+'/distributor']=allSuppliers[suppKey]?.name||suppKey;
-    }
+    if(suppName){ updates['products/'+item.key+'/distributor']=suppName; }
     allProducts[item.key]={...p,stock:newStock,importPrice:item.importPrice,avgPrice:item.importPrice};
   }
-  const receipt={createdAt:now,supplierKey:suppKey,supplierName:allSuppliers[suppKey]?.name||'',
+  const receipt={createdAt:now,supplierKey:suppKey,supplierName:suppName,supplierType:suppType,
     note:document.getElementById('imp-note')?.value||'',
     total:importCart.reduce((s,i)=>s+i.importPrice*i.qty,0),
     items:importCart.map(i=>({key:i.key,name:i.name,qty:i.qty,importPrice:i.importPrice}))};
