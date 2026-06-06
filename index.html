@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- saved from url=(0049)file:///C:/Users/TVH%20386/Downloads/index_3.html -->
 <html lang="vi"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -422,35 +423,6 @@
   </div>
 </div>
 
-<!-- MODAL SUPPLIER -->
-<div class="modal-overlay" id="modal-supplier">
-  <div class="modal">
-    <div class="modal-header">
-      <h3 id="modal-supplier-title">Thêm nhà cung cấp</h3>
-      <button class="btn-close" onclick="closeModal('modal-supplier')">×</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-group"><label>Tên nhà cung cấp *</label><input type="text" id="s-name" placeholder="Nhập tên nhà cung cấp"></div>
-      <div class="form-row">
-        <div class="form-group"><label>Số điện thoại</label><input type="text" id="s-phone" placeholder="0xxx..."></div>
-        <div class="form-group"><label>Địa chỉ</label><input type="text" id="s-address" placeholder="Địa chỉ (tùy chọn)"></div>
-      </div>
-      <div class="form-group">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600">
-          <input type="checkbox" id="s-iscustomer" style="width:16px;height:16px;cursor:pointer">
-          <span>Đây cũng là khách hàng của tôi</span>
-        </label>
-        <div style="font-size:11px;color:var(--text-3);margin-top:4px;margin-left:24px">Sẽ được thêm vào danh sách khách hàng và có thể chọn khi tạo đơn bán hàng</div>
-      </div>
-      <input type="hidden" id="s-key">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeModal('modal-supplier')">Hủy</button>
-      <button class="btn btn-primary" onclick="saveSupplier()">💾 Lưu</button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL ORDER DETAIL -->
 <div class="modal-overlay" id="modal-order">
   <div class="modal" style="max-width:600px;">
@@ -495,10 +467,9 @@ let allProducts = {};
 let allCustomers = {};
 let allSuppliers = {};
 let allOrders = {};
-let allImportReceipts = {};
 let cart = [];
 let selectedCustomer = null;
-let editingOrderKey = null;
+let allImportReceipts = {};
 
 // pagination
 let invPage = 1; const invPerPage = 50;
@@ -533,7 +504,7 @@ onAuthStateChanged(auth, user => {
 
 // ── DATA LOAD ──
 async function loadAllData() {
-  const [pSnap, cSnap, sSnap, oSnap, iSnap] = await Promise.all([
+  const [pSnap, cSnap, sSnap, oSnap, irSnap] = await Promise.all([
     get(ref(db, 'products')),
     get(ref(db, 'customers')),
     get(ref(db, 'suppliers')),
@@ -544,7 +515,7 @@ async function loadAllData() {
   allCustomers = cSnap.val() || {};
   allSuppliers = sSnap.val() || {};
   allOrders = oSnap.val() || {};
-  allImportReceipts = iSnap.val() || {};
+  allImportReceipts = irSnap.val() || {};
   navigate('dashboard');
 }
 
@@ -596,50 +567,9 @@ window.toast = (msg, type='') => {
 window.closeModal = id => document.getElementById(id).classList.remove('open');
 
 // ── DASHBOARD ──
-let dashPeriod = 'month';
-let dashCustomFrom = '';
-let dashCustomTo = '';
-
-function getDashRange() {
-  const now = new Date();
-  let from, to = Date.now();
-  if (dashPeriod === 'today') {
-    from = new Date(now); from.setHours(0,0,0,0); from = from.getTime();
-  } else if (dashPeriod === 'yesterday') {
-    const d = new Date(now); d.setDate(d.getDate()-1); d.setHours(0,0,0,0);
-    from = d.getTime(); to = from + 86400000 - 1;
-  } else if (dashPeriod === 'week') {
-    const d = new Date(now); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0);
-    from = d.getTime();
-  } else if (dashPeriod === 'month') {
-    const d = new Date(now); d.setDate(1); d.setHours(0,0,0,0);
-    from = d.getTime();
-  } else if (dashPeriod === 'custom' && dashCustomFrom) {
-    from = new Date(dashCustomFrom).getTime();
-    to = dashCustomTo ? new Date(dashCustomTo).getTime() + 86400000 - 1 : Date.now();
-  } else { from = 0; }
-  return { from, to };
-}
-
-const dashPeriodLabels = {today:'Hôm Nay', yesterday:'Hôm Qua', week:'Tuần Này', month:'Tháng Này', all:'Tất Cả'};
-
-window.setDashPeriod = (p) => {
-  dashPeriod = p;
-  renderDashboard(document.getElementById('main-content'), document.getElementById('topbar-actions'));
-};
-window.setDashCustom = () => {
-  dashCustomFrom = document.getElementById('dash-from')?.value || '';
-  dashCustomTo = document.getElementById('dash-to')?.value || '';
-  if (dashCustomFrom) { dashPeriod = 'custom'; renderDashboard(document.getElementById('main-content'), document.getElementById('topbar-actions')); }
-};
-
 function renderDashboard(content, actions) {
   const prods = Object.values(allProducts);
   const orders = Object.values(allOrders);
-  const { from, to } = getDashRange();
-  const filteredOrders = orders.filter(o => o.createdAt >= from && o.createdAt <= to);
-  const revenue = filteredOrders.reduce((s,o)=>s+(o.total||0),0);
-  const profit = filteredOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
   const today = new Date(); today.setHours(0,0,0,0);
   const todayOrders = orders.filter(o => o.createdAt >= today.getTime());
   const todayRevenue = todayOrders.reduce((s,o)=>s+(o.total||0),0);
@@ -647,25 +577,31 @@ function renderDashboard(content, actions) {
   const totalStock = prods.reduce((s,p)=>s+(p.avgPrice||p.importPrice||0)*(p.stock||0),0);
   const lowStock = prods.filter(p=>(p.stock||0)>0&&(p.stock||0)<=3).length;
   const outStock = prods.filter(p=>p.name&&(p.stock||0)===0).length;
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+  const monthOrders = orders.filter(o=>o.createdAt>=monthStart.getTime());
+  const monthRevenue = monthOrders.reduce((s,o)=>s+(o.total||0),0);
+  const monthProfit = monthOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
+
+  // Top selling products this month
   const salesMap = {};
-  filteredOrders.forEach(o=>(o.items||[]).forEach(i=>{
-    const imp = allProducts[i.key]?.importPrice||0;
-    const pft = (i.price-imp)*i.qty;
-    if(!salesMap[i.name]) salesMap[i.name]={name:i.name,qty:0,revenue:0,profit:0};
-    salesMap[i.name].qty+=i.qty; salesMap[i.name].revenue+=i.subtotal||i.price*i.qty; salesMap[i.name].profit+=pft;
+  monthOrders.forEach(o=>(o.items||[]).forEach(i=>{
+    if(!salesMap[i.name]) salesMap[i.name]={name:i.name,qty:0,revenue:0};
+    salesMap[i.name].qty+=i.qty; salesMap[i.name].revenue+=i.subtotal||i.price*i.qty;
   }));
-  const topProducts = Object.values(salesMap).sort((a,b)=>b.profit-a.profit).slice(0,5);
-  const chartDays = 30;
+  const topProducts = Object.values(salesMap).sort((a,b)=>b.qty-a.qty).slice(0,5);
+
+  // Chart data - last 14 days
+  const chartDays = 14;
   const chartData = Array.from({length:chartDays},(_,i)=>{
     const d = new Date(); d.setDate(d.getDate()-chartDays+1+i); d.setHours(0,0,0,0);
     const next = new Date(d); next.setDate(next.getDate()+1);
     const dayOrders = orders.filter(o=>o.createdAt>=d.getTime()&&o.createdAt<next.getTime());
-    return { label:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'),
-      rev:dayOrders.reduce((s,o)=>s+(o.total||0),0),
-      profit:dayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0) };
+    return {
+      label: `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`,
+      rev: dayOrders.reduce((s,o)=>s+(o.total||0),0),
+      profit: dayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0)
+    };
   });
-  const periodLabel = dashPeriodLabels[dashPeriod]||'Tùy Chỉnh';
-  const periods = ['today','yesterday','week','month','all'];
 
   actions.innerHTML = `
     <div class="flex-gap">
@@ -675,84 +611,119 @@ function renderDashboard(content, actions) {
     </div>`;
 
   const maxRev = Math.max(...chartData.map(d=>d.rev), 1);
-  const filterBar = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;flex-wrap:wrap">'
-    + periods.map(p=>`<button onclick="setDashPeriod('${p}')" style="padding:6px 14px;border-radius:20px;border:1.5px solid ${dashPeriod===p?'var(--blue)':'var(--border)'};background:${dashPeriod===p?'var(--blue)':'#fff'};color:${dashPeriod===p?'#fff':'var(--text-2)'};font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">${dashPeriodLabels[p]}</button>`).join('')
-    + '<div style="display:flex;align-items:center;gap:6px;margin-left:4px">'
-    + '<input type="date" id="dash-from" value="'+dashCustomFrom+'" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:8px" onchange="setDashCustom()">'
-    + '<span style="color:var(--text-3);font-size:13px">→</span>'
-    + '<input type="date" id="dash-to" value="'+dashCustomTo+'" style="font-size:12px;padding:5px 8px;border:1.5px solid var(--border);border-radius:8px" onchange="setDashCustom()">'
-    + '</div></div>';
 
-  content.innerHTML = filterBar + `
+  content.innerHTML = `
+  <!-- STATS ROW -->
   <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:22px">
-    <div class="stat-card"><div class="stat-label">Doanh thu hôm nay</div><div class="stat-value" style="font-size:18px">${fmt(todayRevenue)}</div><div class="stat-sub">${todayOrders.length} đơn hàng</div></div>
-    <div class="stat-card green"><div class="stat-label">Lợi nhuận hôm nay</div><div class="stat-value" style="font-size:18px">${fmt(todayProfit)}</div><div class="stat-sub">Biên ${todayRevenue?Math.round(todayProfit/todayRevenue*100):0}%</div></div>
-    <div class="stat-card"><div class="stat-label">Doanh thu · ${periodLabel}</div><div class="stat-value" style="font-size:18px">${fmt(revenue)}</div><div class="stat-sub">${filteredOrders.length} đơn</div></div>
-    <div class="stat-card green"><div class="stat-label">Lợi nhuận · ${periodLabel}</div><div class="stat-value" style="font-size:18px">${fmt(profit)}</div><div class="stat-sub">Biên ${revenue?Math.round(profit/revenue*100):0}%</div></div>
-    <div class="stat-card orange"><div class="stat-label">Giá trị tồn kho</div><div class="stat-value" style="font-size:18px">${fmt(totalStock)}</div><div class="stat-sub">${prods.filter(p=>p.name&&(p.stock||0)>0).length} mặt hàng</div></div>
-    <div class="stat-card red"><div class="stat-label">Cảnh báo kho</div><div class="stat-value" style="font-size:18px">${lowStock+outStock}</div><div class="stat-sub">${outStock} hết · ${lowStock} sắp hết</div></div>
+    <div class="stat-card" style="grid-column:span 1">
+      <div class="stat-label">Doanh thu hôm nay</div>
+      <div class="stat-value" style="font-size:18px">${fmt(todayRevenue)}</div>
+      <div class="stat-sub">${todayOrders.length} đơn hàng</div>
+    </div>
+    <div class="stat-card green" style="grid-column:span 1">
+      <div class="stat-label">Lợi nhuận hôm nay</div>
+      <div class="stat-value" style="font-size:18px">${fmt(todayProfit)}</div>
+      <div class="stat-sub">Biên lợi nhuận ${todayRevenue?Math.round(todayProfit/todayRevenue*100):0}%</div>
+    </div>
+    <div class="stat-card" style="grid-column:span 1">
+      <div class="stat-label">Doanh thu tháng</div>
+      <div class="stat-value" style="font-size:18px">${fmt(monthRevenue)}</div>
+      <div class="stat-sub">${monthOrders.length} đơn</div>
+    </div>
+    <div class="stat-card green" style="grid-column:span 1">
+      <div class="stat-label">Lợi nhuận tháng</div>
+      <div class="stat-value" style="font-size:18px">${fmt(monthProfit)}</div>
+      <div class="stat-sub">Biên ${monthRevenue?Math.round(monthProfit/monthRevenue*100):0}%</div>
+    </div>
+    <div class="stat-card orange" style="grid-column:span 1">
+      <div class="stat-label">Giá trị tồn kho</div>
+      <div class="stat-value" style="font-size:18px">${fmt(totalStock)}</div>
+      <div class="stat-sub">${prods.filter(p=>p.name&&(p.stock||0)>0).length} mặt hàng</div>
+    </div>
+    <div class="stat-card red" style="grid-column:span 1">
+      <div class="stat-label">Cảnh báo kho</div>
+      <div class="stat-value" style="font-size:18px">${lowStock+outStock}</div>
+      <div class="stat-sub">${outStock} hết · ${lowStock} sắp hết</div>
+    </div>
   </div>
+
+  <!-- CHART + TOP PRODUCTS -->
   <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;margin-bottom:18px">
+    <!-- CHART -->
     <div class="table-wrap" style="padding:18px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div style="font-size:14px;font-weight:700">📈 Doanh thu & Lợi nhuận — 30 ngày gần nhất</div>
+        <div style="font-size:14px;font-weight:700">📈 Doanh thu & Lợi nhuận — 14 ngày gần nhất</div>
         <div style="display:flex;gap:14px;font-size:12px">
           <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:3px;background:var(--blue);display:inline-block;border-radius:2px"></span>Doanh thu</span>
           <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:3px;background:var(--green);display:inline-block;border-radius:2px"></span>Lợi nhuận</span>
         </div>
       </div>
-      <div style="height:180px;display:flex;align-items:flex-end;gap:2px;padding-bottom:24px;position:relative">
-        <div style="position:absolute;top:0;left:0;right:0;height:1px;background:var(--border)"></div>
+      <div style="height:180px;display:flex;align-items:flex-end;gap:3px;padding-bottom:24px;position:relative">
+        <!-- Y axis hint -->
+        <div style="position:absolute;top:0;left:0;right:0;height:1px;background:var(--border);"></div>
         <div style="position:absolute;top:50%;left:0;right:0;height:1px;background:var(--border);opacity:.5"></div>
         <div style="position:absolute;top:0;left:-4px;font-size:10px;color:var(--text-3);transform:translateY(-50%)">${fmtShort(maxRev)}</div>
         ${chartData.map((d,i)=>{
-          const revH=maxRev>0?Math.round((d.rev/maxRev)*140):0;
-          const profH=maxRev>0?Math.round((Math.max(0,d.profit)/maxRev)*140):0;
-          const isToday=i===chartDays-1;
-          return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;position:relative">'
-            +'<div style="width:100%;display:flex;align-items:flex-end;justify-content:center;gap:1px;height:140px">'
-            +'<div style="width:45%;background:'+(isToday?'var(--blue)':'rgba(26,111,212,0.35)')+';height:'+revH+'px;border-radius:2px 2px 0 0" title="DT: '+fmt(d.rev)+'"></div>'
-            +'<div style="width:45%;background:'+(isToday?'var(--green)':'rgba(22,163,74,0.4)')+';height:'+profH+'px;border-radius:2px 2px 0 0" title="LN: '+fmt(d.profit)+'"></div>'
-            +'</div>'
-            +'<div style="font-size:9px;color:'+(isToday?'var(--blue)':'var(--text-3)')+';font-weight:'+(isToday?700:400)+';white-space:nowrap;position:absolute;bottom:-18px">'+d.label+'</div>'
-            +'</div>';
+          const revH = maxRev>0 ? Math.round((d.rev/maxRev)*140) : 0;
+          const profH = maxRev>0 ? Math.round((Math.max(0,d.profit)/maxRev)*140) : 0;
+          const isToday = i===chartDays-1;
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px;position:relative">
+            <div style="width:100%;display:flex;align-items:flex-end;justify-content:center;gap:1px;height:140px">
+              <div style="width:45%;background:${isToday?'var(--blue)':'rgba(26,111,212,0.35)'};height:${revH}px;border-radius:2px 2px 0 0;transition:height .3s" title="DT: ${fmt(d.rev)}"></div>
+              <div style="width:45%;background:${isToday?'var(--green)':'rgba(22,163,74,0.4)'};height:${profH}px;border-radius:2px 2px 0 0;transition:height .3s" title="LN: ${fmt(d.profit)}"></div>
+            </div>
+            <div style="font-size:9px;color:${isToday?'var(--blue)':'var(--text-3)'};font-weight:${isToday?'700':'400'};white-space:nowrap;position:absolute;bottom:-18px">${d.label}</div>
+          </div>`;
         }).join('')}
       </div>
     </div>
+
+    <!-- TOP PRODUCTS -->
     <div class="table-wrap">
-      <div class="table-header"><span class="table-title">💰 Top lợi nhuận · ${periodLabel}</span></div>
+      <div class="table-header"><span class="table-title">🔥 Top bán chạy tháng này</span></div>
       ${topProducts.length ? topProducts.map((p,i)=>`
       <div style="padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
         <div style="width:22px;height:22px;border-radius:50%;background:${i===0?'#FFA000':i===1?'#90A4AE':i===2?'#CD7F32':'var(--blue-light)'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${i<3?'#fff':'var(--blue)'};flex-shrink:0">${i+1}</div>
-        <div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div><div style="font-size:11px;color:var(--text-3)">${p.qty} cái · DT: ${fmt(p.revenue)}</div></div>
-        <div style="font-size:12px;font-weight:700;color:var(--green);white-space:nowrap">+${fmt(p.profit)}</div>
-      </div>`).join('') : '<div class="empty-state" style="padding:30px"><div class="icon">📊</div>Chưa có dữ liệu</div>'}
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</div>
+          <div style="font-size:11px;color:var(--text-3)">${fmt(p.revenue)}</div>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:var(--blue);white-space:nowrap">${p.qty} cái</div>
+      </div>`).join('') : `<div class="empty-state" style="padding:30px"><div class="icon">📊</div>Chưa có dữ liệu</div>`}
     </div>
   </div>
+
+  <!-- BOTTOM ROW -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
     <div class="table-wrap">
       <div class="table-header"><span class="table-title">📋 Đơn hàng gần nhất</span><button class="btn btn-outline btn-sm" onclick="navigate('orders')">Xem tất cả</button></div>
-      <table><thead><tr><th>Mã đơn</th><th>Thời gian</th><th>Khách hàng</th><th style="text-align:right">Tổng tiền</th></tr></thead>
-      <tbody>${orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(o=>`
-        <tr onclick="viewOrderFromKey('${Object.keys(allOrders).find(k=>allOrders[k]===o)}')" style="cursor:pointer">
-          <td class="mono" style="font-weight:700;color:var(--blue)">${o.code||'--'}</td>
-          <td style="font-size:11px;color:var(--text-3)">${timeAgo(o.createdAt)}</td>
-          <td>${o.customerName||'Khách lẻ'}</td>
-          <td style="text-align:right" class="price-tag">${fmt(o.total)}</td>
-        </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-3)">Chưa có đơn hàng nào</td></tr>'}
-      </tbody></table>
+      <table>
+        <thead><tr><th>Mã đơn</th><th>Thời gian</th><th>Khách hàng</th><th style="text-align:right">Tổng tiền</th></tr></thead>
+        <tbody>
+          ${orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(o=>`
+          <tr onclick="viewOrderFromKey('${Object.keys(allOrders).find(k=>allOrders[k]===o)}')" style="cursor:pointer">
+            <td class="mono" style="font-weight:700">${o.code||'--'}</td>
+            <td style="font-size:11px;color:var(--text-3)">${timeAgo(o.createdAt)}</td>
+            <td>${o.customerName||'Khách lẻ'}</td>
+            <td style="text-align:right" class="price-tag">${fmt(o.total)}</td>
+          </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-3)">Chưa có đơn hàng nào</td></tr>'}
+        </tbody>
+      </table>
     </div>
     <div class="table-wrap">
-      <div class="table-header"><span class="table-title">📥 Lịch sử nhập hàng gần nhất</span><button class="btn btn-outline btn-sm" onclick="navigate('import')">Nhập hàng</button></div>
-      <table><thead><tr><th>Thời gian</th><th>Nhà cung cấp</th><th style="text-align:center">Số SP</th><th style="text-align:right">Tổng nhập</th></tr></thead>
-      <tbody>${Object.values(allImportReceipts).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(r=>`
-        <tr>
-          <td style="font-size:11px;color:var(--text-3)">${timeAgo(r.createdAt)}</td>
-          <td style="font-weight:500">${r.supplierName||'Không rõ'}</td>
-          <td style="text-align:center">${(r.items||[]).reduce((s,i)=>s+i.qty,0)}</td>
-          <td style="text-align:right" class="price-tag">${fmt(r.total)}</td>
-        </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--text-3)">Chưa có phiếu nhập nào</td></tr>'}
-      </tbody></table>
+      <div class="table-header"><span class="table-title">⚠️ Hàng sắp hết / hết kho</span><button class="btn btn-outline btn-sm" onclick="navigate('inventory')">Xem kho</button></div>
+      <table>
+        <thead><tr><th>Sản phẩm</th><th>Nhóm</th><th style="text-align:center">Tồn</th><th style="text-align:right">Giá bán</th></tr></thead>
+        <tbody>
+          ${prods.filter(p=>p.name&&(p.stock||0)<=3).sort((a,b)=>(a.stock||0)-(b.stock||0)).slice(0,6).map(p=>`
+          <tr>
+            <td style="font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</td>
+            <td style="font-size:11px;color:var(--text-3)">${p.group||'--'}</td>
+            <td style="text-align:center"><span class="${(p.stock||0)===0?'stock-zero':'stock-low'}">${p.stock||0}</span></td>
+            <td style="text-align:right" class="price-tag">${fmt(p.price)}</td>
+          </tr>`).join('')||'<tr><td colspan="4" style="text-align:center;padding:24px" class="text-success">✅ Tồn kho ổn định</td></tr>'}
+        </tbody>
+      </table>
     </div>
   </div>`;
 }
@@ -915,17 +886,7 @@ window.saveProduct = async () => {
   allProducts[key] = data;
   closeModal('modal-product');
   toast(existing.name ? 'Đã cập nhật sản phẩm' : 'Đã thêm sản phẩm mới', 'success');
-  if (window._importProductCallback) {
-    window._importProductCallback = false;
-    // Tự động thêm SP vừa tạo vào phiếu nhập
-    const existingInCart = importCart.find(c=>c.key===key);
-    if(existingInCart) existingInCart.qty++;
-    else importCart.push({key, name:data.name, importPrice:data.importPrice||0, qty:1});
-    renderImportCart();
-    toast(data.name+' đã thêm vào phiếu nhập','success');
-  } else {
-    filterInventory();
-  }
+  filterInventory();
 };
 
 window.deleteProduct = async (key, name) => {
@@ -1235,15 +1196,15 @@ window.filterOrders = () => {
       <thead><tr><th>Mã đơn</th><th>Thời gian</th><th>Khách hàng</th><th>SĐT</th><th style="text-align:right">Tổng tiền</th><th>Sản phẩm</th><th style="text-align:center">Thao tác</th></tr></thead>
       <tbody>
         ${slice.map(([k,o])=>`
-        <tr onclick="viewOrder('${k}')" style="cursor:pointer">
-          <td class="mono" style="font-weight:700;color:var(--blue);text-decoration:underline;text-underline-offset:3px">${o.code||k.slice(0,8)}</td>
+        <tr>
+          <td class="mono" style="font-weight:700">${o.code||k.slice(0,8)}</td>
           <td style="font-size:12px;color:var(--text-3)">${fmtDate(o.createdAt)}</td>
           <td>${o.customerName||'Khách lẻ'}</td>
           <td style="font-size:12px">${o.customerPhone||'--'}</td>
           <td style="text-align:right" class="price-tag">${fmt(o.total)}</td>
           <td style="font-size:12px;color:var(--text-3)">${(o.items||[]).length} sản phẩm</td>
           <td style="text-align:center">
-            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewOrder('${k}')">👁 Xem</button>
+            <button class="btn btn-outline btn-sm" onclick="viewOrder('${k}')">👁 Xem</button>
           </td>
         </tr>`).join('')||'<tr><td colspan="7" class="empty-state">Chưa có đơn hàng nào</td></tr>'}
       </tbody>
@@ -1329,15 +1290,15 @@ window.filterCustomers = () => {
       <thead><tr><th>#</th><th>Tên khách hàng</th><th>Số điện thoại</th><th>Địa chỉ</th><th style="text-align:right">Công nợ</th><th style="text-align:center">Thao tác</th></tr></thead>
       <tbody>
         ${slice.map(([k,c],i)=>`
-        <tr onclick="viewCustomerOrders('${k}')" style="cursor:pointer">
+        <tr>
           <td class="text-muted">${(custPage-1)*custPerPage+i+1}</td>
-          <td style="font-weight:600;color:var(--blue)">${c.name}</td>
+          <td style="font-weight:600">${c.name}</td>
           <td>${c.phone||'--'}</td>
           <td style="font-size:12px;color:var(--text-3)">${c.address||'--'}</td>
           <td style="text-align:right" class="${(c.debt||0)>0?'text-danger':'text-success'}">${fmt(c.debt||0)}</td>
           <td style="text-align:center">
-            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();editCustomer('${k}')">✏️</button>
-            <button class="btn btn-sm" style="background:var(--red-light);color:var(--red)" onclick="event.stopPropagation();deleteCustomer('${k}','${c.name.replace(/'/g,"\\'")}')">🗑</button>
+            <button class="btn btn-outline btn-sm" onclick="editCustomer('${k}')">✏️</button>
+            <button class="btn btn-sm" style="background:var(--red-light);color:var(--red)" onclick="deleteCustomer('${k}','${c.name.replace(/'/g,"\\'")}')">🗑</button>
           </td>
         </tr>`).join('')||'<tr><td colspan="6" class="empty-state">Không tìm thấy khách hàng</td></tr>'}
       </tbody>
@@ -1387,177 +1348,143 @@ window.deleteCustomer = async (key,name) => {
   filterCustomers();
 };
 
-window.viewCustomerOrders = (key) => {
-  const c = allCustomers[key]; if(!c) return;
-  const orders = Object.entries(allOrders)
-    .filter(([,o]) => o.customerKey === key)
-    .sort((a,b) => (b[1].createdAt||0) - (a[1].createdAt||0));
-  const totalSpent = orders.reduce((s,[,o]) => s+(o.total||0), 0);
-  const hasDebt = (c.debt||0) > 0;
-  const debtCardClass = hasDebt ? 'stat-card red' : 'stat-card';
-  const debtColor = hasDebt ? 'var(--red)' : 'var(--green)';
-  const phoneAddr = (c.phone||'Chưa có SĐT') + (c.address ? ' · ' + c.address : '');
-  const ordersHtml = orders.length
-    ? '<div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--text-2)">📋 Lịch sử đơn hàng</div>'
-      + '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--bg)">'
-      + '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Mã đơn</th>'
-      + '<th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Thời gian</th>'
-      + '<th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Tổng tiền</th>'
-      + '<th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">SP</th>'
-      + '<th style="padding:8px;border-bottom:1px solid var(--border)"></th></tr></thead><tbody>'
-      + orders.map(([k,o]) =>
-          `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="closeModal('modal-order');setTimeout(()=>viewOrderFromKey('${k}'),100)">`
-          + '<td style="padding:8px;font-weight:700;font-family:monospace;color:var(--blue)">'+(o.code||k.slice(0,8))+'</td>'
-          + '<td style="padding:8px;font-size:12px;color:var(--text-3)">'+fmtDate(o.createdAt)+'</td>'
-          + '<td style="padding:8px;text-align:right;font-weight:700;color:var(--blue)">'+fmt(o.total)+'</td>'
-          + '<td style="padding:8px;text-align:center;font-size:12px;color:var(--text-3)">'+(o.items||[]).length+'</td>'
-          + '<td style="padding:8px;text-align:center"><span style="color:var(--blue)">👁</span></td></tr>'
-        ).join('') + '</tbody></table>'
-    : '<div class="empty-state" style="padding:32px"><div class="icon">🛒</div>Chưa có đơn hàng nào</div>';
-  document.getElementById('modal-order-body').innerHTML =
-    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">'
-    + '<div style="width:44px;height:44px;border-radius:50%;background:var(--blue-light);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--blue-dark);flex-shrink:0">'+(c.name||'?')[0].toUpperCase()+'</div>'
-    + '<div style="flex:1"><div style="font-size:16px;font-weight:700">'+c.name+'</div>'
-    + '<div style="font-size:12px;color:var(--text-3);margin-top:2px">'+phoneAddr+'</div></div>'
-    + `<button class="btn btn-outline btn-sm" onclick="closeModal('modal-order');editCustomer('${key}')">✏️ Sửa</button></div>`
-    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">'
-    + '<div class="stat-card" style="padding:10px 14px"><div class="stat-label">Tổng đơn</div><div class="stat-value" style="font-size:20px">'+orders.length+'</div></div>'
-    + '<div class="stat-card green" style="padding:10px 14px"><div class="stat-label">Tổng chi tiêu</div><div class="stat-value" style="font-size:16px">'+fmt(totalSpent)+'</div></div>'
-    + '<div class="'+debtCardClass+'" style="padding:10px 14px"><div class="stat-label">Công nợ</div><div class="stat-value" style="font-size:16px;color:'+debtColor+'">'+fmt(c.debt||0)+'</div></div>'
-    + '</div>' + ordersHtml;
-  document.getElementById('modal-order').classList.add('open');
-};
-
 // ── SUPPLIERS ──
 function renderSuppliers(content, actions) {
   actions.innerHTML = `<button class="btn btn-primary" onclick="openAddSupplier()">+ Thêm NCC</button>`;
   const supps = Object.entries(allSuppliers);
   content.innerHTML = `
   <div class="table-wrap">
-    <div class="table-header">
-      <span class="table-title">Nhà cung cấp</span>
-      <span class="text-muted" style="font-size:12px">${fmtN(supps.length)} nhà cung cấp</span>
-    </div>
+    <div class="table-header"><span class="table-title">Nhà cung cấp</span></div>
     <table>
-      <thead><tr><th>#</th><th>Tên nhà cung cấp</th><th>Số điện thoại</th><th>Địa chỉ</th><th style="text-align:center">Loại</th><th style="text-align:right">Công nợ</th><th style="text-align:center">Thao tác</th></tr></thead>
-      <tbody>
+      <thead><tr><th>#</th><th>Tên nhà cung cấp</th><th>Số điện thoại</th><th>Địa chỉ</th><th style="text-align:right">Công nợ</th><th style="text-align:center">Thao tác</th></tr></thead>
+      <tbody id="supp-body">
         ${supps.map(([k,s],i)=>`
         <tr>
           <td class="text-muted">${i+1}</td>
           <td style="font-weight:600">${s.name||k}</td>
           <td>${s.phone||'--'}</td>
           <td style="font-size:12px;color:var(--text-3)">${s.address||'--'}</td>
-          <td style="text-align:center">
-            ${s.isCustomer
-              ? '<span class="badge badge-green" style="font-size:10px">NCC + KH</span>'
-              : '<span class="badge badge-blue" style="font-size:10px">NCC</span>'}
-          </td>
           <td style="text-align:right" class="${(s.debt||0)>0?'text-danger':'text-success'}">${fmt(s.debt||0)}</td>
           <td style="text-align:center">
             <button class="btn btn-outline btn-sm" onclick="editSupplier('${k}')">✏️</button>
-            <button class="btn btn-sm" style="background:var(--red-light);color:var(--red)" onclick="deleteSupplier('${k}','${(s.name||'').replace(/'/g,"\\'")}')">🗑</button>
           </td>
-        </tr>`).join('')||'<tr><td colspan="7" class="empty-state">Chưa có nhà cung cấp nào</td></tr>'}
+        </tr>`).join('')||'<tr><td colspan="6" class="empty-state">Chưa có nhà cung cấp nào</td></tr>'}
       </tbody>
     </table>
   </div>`;
 }
 
-window.openAddSupplier = () => {
-  document.getElementById('modal-supplier-title').textContent = 'Thêm nhà cung cấp';
-  ['s-name','s-phone','s-address','s-key'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('s-iscustomer').checked = false;
-  document.getElementById('modal-supplier').classList.add('open');
-};
-window.editSupplier = (key) => {
-  const s = allSuppliers[key]; if(!s) return;
-  document.getElementById('modal-supplier-title').textContent = 'Chỉnh sửa nhà cung cấp';
-  document.getElementById('s-name').value = s.name||'';
-  document.getElementById('s-phone').value = s.phone||'';
-  document.getElementById('s-address').value = s.address||'';
-  document.getElementById('s-iscustomer').checked = !!s.isCustomer;
-  document.getElementById('s-key').value = key;
-  document.getElementById('modal-supplier').classList.add('open');
-};
-window.saveSupplier = async () => {
-  const name = document.getElementById('s-name').value.trim();
-  if(!name){ toast('Vui lòng nhập tên nhà cung cấp','error'); return; }
-  const phone = document.getElementById('s-phone').value.trim();
-  const key = document.getElementById('s-key').value || (phone||genKey(name));
-  const isCustomer = document.getElementById('s-iscustomer').checked;
-  const existing = allSuppliers[key]||{};
-  const data = {...existing, name, phone, address:document.getElementById('s-address').value.trim(), isCustomer, timestamp:Date.now()};
-  await set(ref(db,'suppliers/'+key), data);
-  allSuppliers[key] = data;
-  // Nếu cũng là KH thì thêm vào danh sách khách hàng
-  if(isCustomer) {
-    const cData = {...(allCustomers[key]||{}), name, phone, address:data.address, _isSupplier:true};
-    await set(ref(db,'customers/'+key), cData);
-    allCustomers[key] = cData;
-  }
-  closeModal('modal-supplier');
-  toast('Đã lưu nhà cung cấp','success');
-  navigate('suppliers');
-};
-window.deleteSupplier = async (key,name) => {
-  if(!confirm('Xóa nhà cung cấp "'+name+'"?')) return;
-  await remove(ref(db,'suppliers/'+key));
-  delete allSuppliers[key];
-  toast('Đã xóa nhà cung cấp','success');
-  navigate('suppliers');
-};
+window.openAddSupplier = () => toast('Tính năng thêm NCC đang phát triển', '');
+window.editSupplier = (key) => toast('Tính năng sửa NCC đang phát triển', '');
 
 // ── IMPORT ──
 function renderImport(content, actions) {
   actions.innerHTML = `<button class="btn btn-primary" onclick="createImportReceipt()">✅ Lưu phiếu nhập</button>`;
-  // Gộp NCC + KH (những người là supplier)
-  const suppOptions = [
-    ...Object.entries(allSuppliers).map(([k,s])=>`<option value="supp_${k}">[NCC] ${s.name}</option>`),
-    ...Object.entries(allCustomers).filter(([k,c])=>c.name).map(([k,c])=>`<option value="cust_${k}">[KH] ${c.name}${c.phone?' · '+c.phone:''}</option>`)
-  ].join('');
+
+  const receipts = Object.entries(allImportReceipts)
+    .sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)).slice(0,10);
+
   content.innerHTML = `
-  <div style="display:grid;grid-template-columns:1fr 360px;gap:16px;height:calc(100vh - var(--header-h) - 40px)">
-    <div style="display:flex;flex-direction:column;gap:12px;overflow:hidden">
-      <div class="flex-gap">
-        <div class="search-box" style="flex:1"><input type="search" id="imp-search" placeholder="Tìm sản phẩm..." style="width:100%" oninput="searchImport(this.value)"></div>
-        <button class="btn btn-outline" onclick="openAddProductFromImport()" title="Tạo sản phẩm mới nhanh" style="white-space:nowrap">+ Tạo SP mới</button>
+  <div style="display:flex;flex-direction:column;gap:16px;height:calc(100vh - var(--header-h) - 40px)">
+    <div style="display:grid;grid-template-columns:1fr 360px;gap:16px;flex:1;min-height:0">
+      <div style="display:flex;flex-direction:column;gap:12px;overflow:hidden">
+        <div class="flex-gap">
+          <div class="search-box" style="flex:1"><input type="search" id="imp-search" placeholder="Tìm sản phẩm..." style="width:100%" oninput="searchImport(this.value)"></div>
+        </div>
+        <div class="product-search-results" id="imp-results">
+          <div class="empty-state"><div class="icon">🔍</div>Gõ tên sản phẩm để tìm</div>
+        </div>
       </div>
-      <div class="product-search-results" id="imp-results">
-        <div class="empty-state"><div class="icon">🔍</div>Gõ tên sản phẩm để tìm</div>
+      <div class="sale-right">
+        <div class="cart-header">📦 Phiếu nhập hàng</div>
+        <div class="customer-select" style="position:relative">
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="position:relative;flex:1">
+              <input type="text" id="imp-supplier-input" placeholder="🏭 Tìm nhà cung cấp..."
+                style="width:100%;font-size:13px;padding-right:28px"
+                oninput="searchSupplierSuggest(this.value)" autocomplete="off">
+              <button onclick="clearSupplierSelect()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-3);font-size:16px;line-height:1">×</button>
+            </div>
+          </div>
+          <div id="imp-supplier-selected" style="display:none;margin-top:6px;padding:7px 10px;background:var(--blue-light);border-radius:7px;font-size:12px;display:flex;align-items:center;justify-content:space-between">
+            <span id="imp-supplier-label" style="font-weight:600;color:var(--blue-dark)"></span>
+            <button onclick="clearSupplierSelect()" style="background:none;border:none;cursor:pointer;color:var(--blue-dark);font-size:14px">×</button>
+          </div>
+          <div id="imp-supplier-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:200;background:#fff;border:1.5px solid var(--blue);border-radius:0 0 10px 10px;max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(26,111,212,0.15)"></div>
+          <input type="hidden" id="imp-supplier" value="">
+        </div>
+        <div class="cart-items" id="imp-items">
+          <div class="empty-state" style="padding:30px"><div class="icon">📦</div>Chưa có sản phẩm</div>
+        </div>
+        <div class="cart-summary">
+          <div class="summary-row" style="font-weight:700;font-size:16px">
+            <span>Tổng nhập</span>
+            <span class="price-tag" id="imp-total">0đ</span>
+          </div>
+          <div class="form-group" style="margin-top:10px">
+            <label style="font-size:12px;font-weight:600;color:var(--text-2)">Ghi chú</label>
+            <textarea id="imp-note" rows="2" style="width:100%;resize:none" placeholder="Ghi chú phiếu nhập..."></textarea>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="sale-right">
-      <div class="cart-header">📦 Phiếu nhập hàng</div>
-      <div class="customer-select">
-        <select id="imp-supplier" style="width:100%;font-size:13px">
-          <option value="">-- Chọn NCC / Khách hàng --</option>
-          ${suppOptions}
-        </select>
+    <!-- IMPORT HISTORY -->
+    <div class="table-wrap" style="flex-shrink:0">
+      <div class="table-header">
+        <span class="table-title">📋 Lịch sử nhập hàng gần nhất</span>
+        <span class="text-muted" style="font-size:12px">10 phiếu gần nhất</span>
       </div>
-      <div class="cart-items" id="imp-items">
-        <div class="empty-state" style="padding:30px"><div class="icon">📦</div>Chưa có sản phẩm</div>
-      </div>
-      <div class="cart-summary">
-        <div class="summary-row" style="font-weight:700;font-size:16px">
-          <span>Tổng nhập</span>
-          <span class="price-tag" id="imp-total">0đ</span>
-        </div>
-        <div class="form-group" style="margin-top:10px">
-          <label style="font-size:12px;font-weight:600;color:var(--text-2)">Ghi chú</label>
-          <textarea id="imp-note" rows="2" style="width:100%;resize:none" placeholder="Ghi chú phiếu nhập..."></textarea>
-        </div>
-      </div>
+      <table>
+        <thead><tr>
+          <th>Thời gian</th>
+          <th>Nhà cung cấp</th>
+          <th style="text-align:center">Số SP</th>
+          <th style="text-align:right">Tổng tiền</th>
+          <th>Ghi chú</th>
+          <th style="text-align:center">Chi tiết</th>
+        </tr></thead>
+        <tbody>
+          ${receipts.map(([k,r])=>`
+          <tr style="cursor:pointer" onclick="viewImportReceipt('${k}')">
+            <td style="font-size:12px;color:var(--text-3)">${fmtDate(r.createdAt)}</td>
+            <td style="font-weight:500">${r.supplierName||'Không có NCC'}</td>
+            <td style="text-align:center">${(r.items||[]).reduce((s,i)=>s+i.qty,0)} cái</td>
+            <td style="text-align:right" class="price-tag">${fmt(r.total)}</td>
+            <td style="font-size:12px;color:var(--text-3);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.note||'--'}</td>
+            <td style="text-align:center"><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewImportReceipt('${k}')">👁 Xem</button></td>
+          </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-3)">Chưa có phiếu nhập nào</td></tr>'}
+        </tbody>
+      </table>
     </div>
   </div>`;
 }
 
-window.openAddProductFromImport = () => {
-  document.getElementById('modal-product-title').textContent = 'Tạo sản phẩm mới';
-  ['p-name','p-import','p-price','p-stock','p-warranty','p-key'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('p-group').value = '';
-  // Callback sau khi lưu: tự động thêm vào phiếu nhập
-  window._importProductCallback = true;
-  document.getElementById('modal-product').classList.add('open');
+window.viewImportReceipt = (key) => {
+  const r = allImportReceipts[key]; if(!r) return;
+  document.getElementById('modal-order-body').innerHTML = `
+  <div style="font-size:12px;color:var(--text-3);margin-bottom:14px">
+    <b style="font-size:14px;color:var(--text)">Phiếu nhập hàng</b> · ${fmtDate(r.createdAt)}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;font-size:13px">
+    <div><b>Nhà cung cấp:</b> ${r.supplierName||'Không có'}</div>
+    <div><b>Ghi chú:</b> ${r.note||'--'}</div>
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--bg)">
+      <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Sản phẩm</th>
+      <th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">SL</th>
+      <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Giá nhập</th>
+      <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Thành tiền</th>
+    </tr></thead>
+    <tbody>
+      ${(r.items||[]).map(i=>'<tr><td style="padding:8px;border-bottom:1px solid var(--border)">'+i.name+'</td><td style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">'+i.qty+'</td><td style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">'+fmt(i.importPrice)+'</td><td style="padding:8px;text-align:right;border-bottom:1px solid var(--border);font-weight:700">'+fmt(i.importPrice*i.qty)+'</td></tr>').join('')}
+    </tbody>
+  </table>
+  <div style="margin-top:12px;text-align:right;font-size:13px">
+    <div style="font-size:18px;font-weight:700;color:var(--blue);margin-top:4px">Tổng nhập: ${fmt(r.total)}</div>
+    <div style="color:var(--text-3)">${(r.items||[]).reduce((s,i)=>s+i.qty,0)} sản phẩm · ${(r.items||[]).length} mặt hàng</div>
+  </div>`;
+  document.getElementById('modal-order').classList.add('open');
 };
 
 let importCart = [];
@@ -1607,13 +1534,52 @@ window.impSetQty=(i,v)=>{importCart[i].qty=Math.max(1,parseInt(v)||1);renderImpo
 window.impSetPrice=(i,v)=>{importCart[i].importPrice=parseInt(v)||0;renderImportCart();};
 window.impRemove=(i)=>{importCart.splice(i,1);renderImportCart();};
 
+window.searchSupplierSuggest = (q) => {
+  const box = document.getElementById('imp-supplier-suggest'); if(!box) return;
+  q = q.trim();
+  if (!q) { box.style.display='none'; return; }
+  const results = Object.entries(allSuppliers).filter(([k,s]) =>
+    s.name && s.name.toLowerCase().includes(q.toLowerCase())
+  ).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'','vi')).slice(0,10);
+  if (!results.length) {
+    box.innerHTML = '<div style="padding:12px 14px;font-size:13px;color:var(--text-3)">Kh\u00f4ng t\u00ecm th\u1ea5y nh\u00e0 cung c\u1ea5p</div>';
+    box.style.display='block'; return;
+  }
+  box.innerHTML = results.map(([k,s])=>
+    '<div onclick="selectSupplierFromSuggest(\''+k+'\')" style="padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;transition:background .1s" onmouseenter="this.style.background=\'var(--blue-light)\'" onmouseleave="this.style.background=\'\'"><div style="font-weight:600">'+s.name+'</div>'+(s.phone?'<div style="font-size:11px;color:var(--text-3)">'+s.phone+'</div>':'')+'</div>'
+  ).join('');
+  box.style.display='block';
+};
+window.selectSupplierFromSuggest = (key) => {
+  const s = allSuppliers[key]; if(!s) return;
+  document.getElementById('imp-supplier').value = key;
+  const inp = document.getElementById('imp-supplier-input');
+  const sel = document.getElementById('imp-supplier-selected');
+  const lbl = document.getElementById('imp-supplier-label');
+  if(inp) inp.value='';
+  if(lbl) lbl.textContent = '\uD83C\uDFED ' + s.name + (s.phone?' \u00b7 '+s.phone:'');
+  if(sel) sel.style.display='flex';
+  const box = document.getElementById('imp-supplier-suggest');
+  if(box) box.style.display='none';
+};
+window.clearSupplierSelect = () => {
+  const hid=document.getElementById('imp-supplier'); if(hid) hid.value='';
+  const inp=document.getElementById('imp-supplier-input');
+  const sel=document.getElementById('imp-supplier-selected');
+  const box=document.getElementById('imp-supplier-suggest');
+  if(inp) inp.value='';
+  if(sel) sel.style.display='none';
+  if(box) box.style.display='none';
+};
+document.addEventListener('click', e=>{
+  if(!e.target.closest('#imp-supplier-input') && !e.target.closest('#imp-supplier-suggest'))
+    { const b=document.getElementById('imp-supplier-suggest'); if(b) b.style.display='none'; }
+});
+
 window.createImportReceipt = async () => {
   if(!importCart.length){toast('Chưa có sản phẩm','error');return;}
   const now=Date.now();
-  const rawSuppVal=document.getElementById('imp-supplier')?.value||'';
-  let suppKey='', suppName='', suppType='';
-  if(rawSuppVal.startsWith('supp_')){ suppKey=rawSuppVal.slice(5); suppName=allSuppliers[suppKey]?.name||''; suppType='supplier'; }
-  else if(rawSuppVal.startsWith('cust_')){ suppKey=rawSuppVal.slice(5); suppName=allCustomers[suppKey]?.name||''; suppType='customer'; }
+  const suppKey=document.getElementById('imp-supplier')?.value||'';
   const updates={};
   for(const item of importCart){
     const p=allProducts[item.key]||{};
@@ -1622,10 +1588,12 @@ window.createImportReceipt = async () => {
     updates['products/'+item.key+'/importPrice']=item.importPrice;
     updates['products/'+item.key+'/avgPrice']=item.importPrice;
     updates['products/'+item.key+'/importDate']=new Date(now).toLocaleString('vi-VN');
-    if(suppName){ updates['products/'+item.key+'/distributor']=suppName; }
+    if(suppKey){
+      updates['products/'+item.key+'/distributor']=allSuppliers[suppKey]?.name||suppKey;
+    }
     allProducts[item.key]={...p,stock:newStock,importPrice:item.importPrice,avgPrice:item.importPrice};
   }
-  const receipt={createdAt:now,supplierKey:suppKey,supplierName:suppName,supplierType:suppType,
+  const receipt={createdAt:now,supplierKey:suppKey,supplierName:allSuppliers[suppKey]?.name||'',
     note:document.getElementById('imp-note')?.value||'',
     total:importCart.reduce((s,i)=>s+i.importPrice*i.qty,0),
     items:importCart.map(i=>({key:i.key,name:i.name,qty:i.qty,importPrice:i.importPrice}))};
@@ -1639,7 +1607,7 @@ window.createImportReceipt = async () => {
 };
 
 // ── CATALOG ──
-let catalogView = 'grid'; // 'grid' | 'list'
+let catalogView = 'list'; // 'grid' | 'list'
 let catalogPage = 1; const catalogPerPage = 48;
 
 function renderCatalog(content, actions) {
@@ -1664,8 +1632,8 @@ function renderCatalog(content, actions) {
         <option value="stock_desc">Tồn kho nhiều nhất</option>
       </select>
       <div class="catalog-view-mode">
-        <button class="view-btn active" id="vbtn-grid" onclick="setCatalogView('grid')" title="Dạng lưới">⊞</button>
-        <button class="view-btn" id="vbtn-list" onclick="setCatalogView('list')" title="Dạng danh sách">☰</button>
+        <button class="view-btn" id="vbtn-grid" onclick="setCatalogView('grid')" title="Dạng lưới">⊞</button>
+        <button class="view-btn active" id="vbtn-list" onclick="setCatalogView('list')" title="Dạng danh sách">☰</button>
       </div>
     </div>`;
   content.innerHTML = `<div id="cat-wrap"></div>`;
