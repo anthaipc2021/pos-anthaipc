@@ -1538,26 +1538,38 @@ window.searchSupplierSuggest = (q) => {
   const box = document.getElementById('imp-supplier-suggest'); if(!box) return;
   q = q.trim();
   if (!q) { box.style.display='none'; return; }
-  const results = Object.entries(allSuppliers).filter(([k,s]) =>
-    s.name && s.name.toLowerCase().includes(q.toLowerCase())
-  ).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'','vi')).slice(0,10);
-  if (!results.length) {
-    box.innerHTML = '<div style="padding:12px 14px;font-size:13px;color:var(--text-3)">Kh\u00f4ng t\u00ecm th\u1ea5y nh\u00e0 cung c\u1ea5p</div>';
+  const ql = q.toLowerCase();
+  const suppResults = Object.entries(allSuppliers)
+    .filter(([k,s]) => s.name && s.name.toLowerCase().includes(ql))
+    .map(([k,s]) => ({id:'supp_'+k, name:s.name, phone:s.phone||'', tag:'NCC'}));
+  const custResults = Object.entries(allCustomers)
+    .filter(([k,c]) => c.name && (c.name.toLowerCase().includes(ql)||(c.phone||'').includes(q)))
+    .map(([k,c]) => ({id:'cust_'+k, name:c.name, phone:c.phone||'', tag:'KH'}));
+  const all = [...suppResults, ...custResults].sort((a,b)=>a.name.localeCompare(b.name,'vi')).slice(0,12);
+  if (!all.length) {
+    box.innerHTML = '<div style="padding:12px 14px;font-size:13px;color:var(--text-3)">Kh\u00f4ng t\u00ecm th\u1ea5y</div>';
     box.style.display='block'; return;
   }
-  box.innerHTML = results.map(([k,s])=>
-    '<div onclick="selectSupplierFromSuggest(\''+k+'\')" style="padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;transition:background .1s" onmouseenter="this.style.background=\'var(--blue-light)\'" onmouseleave="this.style.background=\'\'"><div style="font-weight:600">'+s.name+'</div>'+(s.phone?'<div style="font-size:11px;color:var(--text-3)">'+s.phone+'</div>':'')+'</div>'
+  box.innerHTML = all.map(r=>
+    '<div onclick="selectSupplierFromSuggest(\''+r.id+'\')" style="padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;transition:background .1s;display:flex;align-items:center;gap:8px" onmouseenter="this.style.background=\'var(--blue-light)\'" onmouseleave="this.style.background=\'\'">'
+    +'<span class="badge '+(r.tag==='NCC'?'badge-blue':'badge-green')+'" style="font-size:10px;flex-shrink:0">'+r.tag+'</span>'
+    +'<div><div style="font-weight:600">'+r.name+'</div>'+(r.phone?'<div style="font-size:11px;color:var(--text-3)">'+r.phone+'</div>':'')+'</div>'
+    +'</div>'
   ).join('');
   box.style.display='block';
 };
-window.selectSupplierFromSuggest = (key) => {
-  const s = allSuppliers[key]; if(!s) return;
-  document.getElementById('imp-supplier').value = key;
+window.selectSupplierFromSuggest = (id) => {
+  const isSupp = id.startsWith('supp_');
+  const key = id.slice(5);
+  const obj = isSupp ? allSuppliers[key] : allCustomers[key];
+  if(!obj) return;
+  document.getElementById('imp-supplier').value = id;
   const inp = document.getElementById('imp-supplier-input');
   const sel = document.getElementById('imp-supplier-selected');
   const lbl = document.getElementById('imp-supplier-label');
+  const tag = isSupp ? '[NCC] ' : '[KH] ';
   if(inp) inp.value='';
-  if(lbl) lbl.textContent = '\uD83C\uDFED ' + s.name + (s.phone?' \u00b7 '+s.phone:'');
+  if(lbl) lbl.textContent = tag + obj.name + (obj.phone?' \u00b7 '+obj.phone:'');
   if(sel) sel.style.display='flex';
   const box = document.getElementById('imp-supplier-suggest');
   if(box) box.style.display='none';
@@ -1579,7 +1591,11 @@ document.addEventListener('click', e=>{
 window.createImportReceipt = async () => {
   if(!importCart.length){toast('Chưa có sản phẩm','error');return;}
   const now=Date.now();
-  const suppKey=document.getElementById('imp-supplier')?.value||'';
+  const rawVal=document.getElementById('imp-supplier')?.value||'';
+  let suppKey='', suppName='';
+  if(rawVal.startsWith('supp_')){ suppKey=rawVal.slice(5); suppName=allSuppliers[suppKey]?.name||''; }
+  else if(rawVal.startsWith('cust_')){ suppKey=rawVal.slice(5); suppName=allCustomers[suppKey]?.name||''; }
+  else { suppKey=rawVal; suppName=allSuppliers[suppKey]?.name||''; }
   const updates={};
   for(const item of importCart){
     const p=allProducts[item.key]||{};
@@ -1588,12 +1604,10 @@ window.createImportReceipt = async () => {
     updates['products/'+item.key+'/importPrice']=item.importPrice;
     updates['products/'+item.key+'/avgPrice']=item.importPrice;
     updates['products/'+item.key+'/importDate']=new Date(now).toLocaleString('vi-VN');
-    if(suppKey){
-      updates['products/'+item.key+'/distributor']=allSuppliers[suppKey]?.name||suppKey;
-    }
+    if(suppName){ updates['products/'+item.key+'/distributor']=suppName; }
     allProducts[item.key]={...p,stock:newStock,importPrice:item.importPrice,avgPrice:item.importPrice};
   }
-  const receipt={createdAt:now,supplierKey:suppKey,supplierName:allSuppliers[suppKey]?.name||'',
+  const receipt={createdAt:now,supplierKey:suppKey,supplierName:suppName,
     note:document.getElementById('imp-note')?.value||'',
     total:importCart.reduce((s,i)=>s+i.importPrice*i.qty,0),
     items:importCart.map(i=>({key:i.key,name:i.name,qty:i.qty,importPrice:i.importPrice}))};
