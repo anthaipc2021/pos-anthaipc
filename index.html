@@ -505,7 +505,9 @@ let currentViewingImportKey = null;
 
 // pagination
 let invPage = 1; const invPerPage = 50;
+let invSort = 'name'; let invSortDir = 1;
 let custPage = 1; const custPerPage = 50;
+let custSort = 'name';
 let ordPage = 1; const ordPerPage = 30;
 
 // ── AUTH ──
@@ -805,12 +807,24 @@ window.filterInventory = () => {
     if (sf==='low' && ((p.stock||0)>3||(p.stock||0)<=0)) return false;
     if (sf==='out' && (p.stock||0)>0) return false;
     return true;
-  }).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'', 'vi'));
+  }).sort((a,b)=>{
+    const pa=a[1], pb=b[1];
+    if(invSort==='name') return invSortDir*(pa.name||'').localeCompare(pb.name||'','vi');
+    if(invSort==='importPrice') return invSortDir*((pa.importPrice||0)-(pb.importPrice||0));
+    if(invSort==='price') return invSortDir*((pa.price||0)-(pb.price||0));
+    if(invSort==='stock') return invSortDir*((pa.stock||0)-(pb.stock||0));
+    if(invSort==='stockVal') return invSortDir*((pa.avgPrice||pa.importPrice||0)*(pa.stock||0)-(pb.avgPrice||pb.importPrice||0)*(pb.stock||0));
+    return 0;
+  });
 
   const total = prods.length;
   const pages = Math.ceil(total/invPerPage) || 1;
   const slice = prods.slice((invPage-1)*invPerPage, invPage*invPerPage);
   const totalVal = Object.values(allProducts).reduce((s,p)=>s+(p.avgPrice||p.importPrice||0)*(p.stock||0),0);
+
+  // Arrow indicator cho header
+  const arrow = (col) => invSort===col ? (invSortDir===1?' ↑':' ↓') : '';
+  const thStyle = 'cursor:pointer;user-select:none;white-space:nowrap';
 
   const wrap = document.getElementById('inv-table-wrap');
   if (!wrap) return;
@@ -837,10 +851,10 @@ window.filterInventory = () => {
     <table>
       <thead><tr>
         <th>#</th><th>Tên sản phẩm</th><th>Nhóm</th>
-        <th style="text-align:right">Giá nhập</th>
-        <th style="text-align:right">Giá bán</th>
-        <th style="text-align:center">Tồn kho</th>
-        <th style="text-align:right">Giá trị kho</th>
+        <th style="text-align:right;${thStyle}" onclick="invSortBy('importPrice')">Giá nhập${arrow('importPrice')}</th>
+        <th style="text-align:right;${thStyle}" onclick="invSortBy('price')">Giá bán${arrow('price')}</th>
+        <th style="text-align:center;${thStyle}" onclick="invSortBy('stock')">Tồn kho${arrow('stock')}</th>
+        <th style="text-align:right;${thStyle}" onclick="invSortBy('stockVal')">Giá trị kho${arrow('stockVal')}</th>
         <th>Bảo hành</th>
         <th style="text-align:center">Thao tác</th>
       </tr></thead>
@@ -878,6 +892,10 @@ window.filterInventory = () => {
 };
 
 window.invChangePage = p => { invPage = p; filterInventory(); };
+window.invSortBy = (col) => {
+  if (invSort === col) invSortDir *= -1; else { invSort = col; invSortDir = col==='name'?1:-1; }
+  invPage = 1; filterInventory();
+};
 
 window.openAddProduct = () => {
   document.getElementById('modal-product-title').textContent = 'Thêm sản phẩm mới';
@@ -1510,6 +1528,11 @@ function renderCustomers(content, actions) {
   actions.innerHTML = `
     <div class="flex-gap">
       <div class="search-box"><input type="search" id="cust-search" placeholder="Tên, SĐT..." style="width:220px" oninput="filterCustomers()"></div>
+      <select id="cust-sort" onchange="custSort=this.value;custPage=1;filterCustomers()" style="width:200px">
+        <option value="name">Tên A → Z</option>
+        <option value="spent_desc">Chi tiêu nhiều nhất</option>
+        <option value="orders_desc">Mua nhiều lần nhất</option>
+      </select>
       <button class="btn btn-primary" onclick="openAddCustomer()">+ Thêm KH</button>
     </div>`;
   content.innerHTML = `<div id="cust-table-wrap"></div>`;
@@ -1518,10 +1541,27 @@ function renderCustomers(content, actions) {
 
 window.filterCustomers = () => {
   const q = (document.getElementById('cust-search')?.value||'').toLowerCase();
+  const sort = document.getElementById('cust-sort')?.value || custSort;
+
+  // Tính chi tiêu + số đơn từ allOrders
+  const statsMap = {};
+  Object.values(allOrders).forEach(o => {
+    if (!o.customerKey) return;
+    if (!statsMap[o.customerKey]) statsMap[o.customerKey] = {spent:0, orders:0, lastYear:0};
+    statsMap[o.customerKey].spent += (o.total||0);
+    statsMap[o.customerKey].orders += 1;
+    const oneYearAgo = Date.now() - 365*86400000;
+    if ((o.createdAt||0) >= oneYearAgo) statsMap[o.customerKey].lastYear += 1;
+  });
+
   let custs = Object.entries(allCustomers).filter(([k,c])=>{
     if(!c.name) return false;
     return !q || c.name.toLowerCase().includes(q) || (c.phone||'').includes(q);
-  }).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'','vi'));
+  });
+
+  if (sort === 'name') custs.sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'','vi'));
+  else if (sort === 'spent_desc') custs.sort((a,b)=>(statsMap[b[0]]?.spent||0)-(statsMap[a[0]]?.spent||0));
+  else if (sort === 'orders_desc') custs.sort((a,b)=>(statsMap[b[0]]?.lastYear||0)-(statsMap[a[0]]?.lastYear||0));
 
   const total=custs.length, pages=Math.ceil(total/custPerPage)||1;
   const slice=custs.slice((custPage-1)*custPerPage, custPage*custPerPage);
@@ -1533,20 +1573,33 @@ window.filterCustomers = () => {
       <span class="text-muted" style="font-size:12px">${fmtN(total)} khách</span>
     </div>
     <table>
-      <thead><tr><th>#</th><th>Tên khách hàng</th><th>Số điện thoại</th><th>Địa chỉ</th><th style="text-align:right">Công nợ</th><th style="text-align:center">Thao tác</th></tr></thead>
+      <thead><tr>
+        <th>#</th><th>Tên khách hàng</th><th>Số điện thoại</th><th>Địa chỉ</th>
+        <th style="text-align:right">Tổng chi tiêu</th>
+        <th style="text-align:center">Số đơn (năm)</th>
+        <th style="text-align:right">Công nợ</th>
+        <th style="text-align:center">Thao tác</th>
+      </tr></thead>
       <tbody>
-        ${slice.map(([k,c],i)=>`
-        <tr onclick="viewCustomerOrders('${k}')" style="cursor:pointer">
-          <td class="text-muted">${(custPage-1)*custPerPage+i+1}</td>
-          <td style="font-weight:600;color:var(--blue)">${c.name}</td>
-          <td>${c.phone||'--'}</td>
-          <td style="font-size:12px;color:var(--text-3)">${c.address||'--'}</td>
-          <td style="text-align:right" class="${(c.debt||0)>0?'text-danger':'text-success'}">${fmt(c.debt||0)}</td>
-          <td style="text-align:center">
-            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();editCustomer('${k}')">✏️</button>
-            <button class="btn btn-sm" style="background:var(--red-light);color:var(--red)" onclick="event.stopPropagation();deleteCustomer('${k}','${c.name.replace(/'/g,"\\'")}')">🗑</button>
-          </td>
-        </tr>`).join('')||'<tr><td colspan="6" class="empty-state">Không tìm thấy khách hàng</td></tr>'}
+        ${slice.map(([k,c],i)=>{
+          const st = statsMap[k]||{spent:0,orders:0,lastYear:0};
+          return `
+          <tr onclick="viewCustomerOrders('${k}')" style="cursor:pointer">
+            <td class="text-muted">${(custPage-1)*custPerPage+i+1}</td>
+            <td style="font-weight:600;color:var(--blue)">${c.name}</td>
+            <td>${c.phone||'--'}</td>
+            <td style="font-size:12px;color:var(--text-3)">${c.address||'--'}</td>
+            <td style="text-align:right;font-weight:600;color:var(--blue)">${st.spent>0?fmt(st.spent):'<span class="text-muted">--</span>'}</td>
+            <td style="text-align:center">
+              ${st.lastYear>0?`<span class="badge badge-green">${st.lastYear} lần</span>`:'<span class="text-muted">--</span>'}
+            </td>
+            <td style="text-align:right" class="${(c.debt||0)>0?'text-danger':'text-success'}">${fmt(c.debt||0)}</td>
+            <td style="text-align:center">
+              <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();editCustomer('${k}')">✏️</button>
+              <button class="btn btn-sm" style="background:var(--red-light);color:var(--red)" onclick="event.stopPropagation();deleteCustomer('${k}','${c.name.replace(/'/g,"\\'")}')">🗑</button>
+            </td>
+          </tr>`;
+        }).join('')||'<tr><td colspan="8" class="empty-state">Không tìm thấy khách hàng</td></tr>'}
       </tbody>
     </table>
     <div class="pagination">
