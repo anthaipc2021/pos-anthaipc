@@ -1305,6 +1305,11 @@ window.printOrder = () => window.print();
 // ── ESC đóng modal ──
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
+  // Nếu đang ở chế độ sửa đơn thì hủy sửa, không đóng modal
+  if (window._editItems !== null && window._editItems !== undefined) {
+    cancelEditOrder();
+    return;
+  }
   var ids = ['modal-order','modal-product','modal-customer','modal-supplier'];
   for (var i = 0; i < ids.length; i++) {
     var el = document.getElementById(ids[i]);
@@ -1318,23 +1323,24 @@ window.editOrderModal = function() {
   var o = allOrders[key];
   if (!key || !o) return;
 
-  var customers = Object.entries(allCustomers)
-    .filter(function(entry) { return entry[1].name; })
-    .sort(function(a, b) { return (a[1].name||'').localeCompare(b[1].name||'', 'vi'); });
-
-  var custOptions = '<option value="">-- Khách lẻ --</option>'
-    + customers.map(function(entry) {
-        var k = entry[0], c = entry[1];
-        return '<option value="' + k + '"' + (o.customerKey === k ? ' selected' : '') + '>'
-          + c.name + (c.phone ? ' · ' + c.phone : '') + '</option>';
-      }).join('');
-
   window._editItems = JSON.parse(JSON.stringify(o.items || []));
+  window._editCustKey = o.customerKey || '';
+  window._editCustName = o.customerName || 'Khách lẻ';
 
   document.getElementById('modal-order-body').innerHTML =
-    '<div style="margin-bottom:12px">'
+    '<div style="margin-bottom:12px;position:relative">'
     + '<label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:4px">Khách hàng</label>'
-    + '<select id="edit-cust" style="width:100%;font-size:13px">' + custOptions + '</select>'
+    + '<div style="display:flex;gap:6px;align-items:center">'
+    + '<div style="position:relative;flex:1">'
+    + '<input type="text" id="edit-cust-input" placeholder="Tìm tên / SĐT khách hàng..." autocomplete="off"'
+    + ' style="width:100%;font-size:13px;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px"'
+    + ' oninput="editCustSearch(this.value)" />'
+    + '<div id="edit-cust-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:300;background:#fff;border:1.5px solid var(--blue);border-radius:0 0 10px 10px;max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(26,111,212,0.15)"></div>'
+    + '</div></div>'
+    + '<div id="edit-cust-selected" style="margin-top:6px;padding:7px 10px;background:var(--blue-light);border-radius:7px;font-size:12px;display:flex;align-items:center;justify-content:space-between">'
+    + '<span id="edit-cust-label" style="font-weight:600;color:var(--blue-dark)">👤 ' + (o.customerName||'Khách lẻ') + (o.customerPhone ? ' · '+o.customerPhone : '') + '</span>'
+    + '<button onclick="editCustClear()" style="background:none;border:none;cursor:pointer;color:var(--blue-dark);font-size:14px">×</button>'
+    + '</div>'
     + '</div>'
     + '<div style="margin-bottom:10px">'
     + '<label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:6px">Sản phẩm</label>'
@@ -1371,6 +1377,49 @@ function renderEditItemsList() {
       + '</div>';
   }).join('');
 }
+
+window.editCustSearch = function(q) {
+  var box = document.getElementById('edit-cust-suggest');
+  if (!box) return;
+  q = q.trim();
+  if (!q) { box.style.display = 'none'; return; }
+  var results = Object.entries(allCustomers).filter(function(entry) {
+    var c = entry[1];
+    return c.name && (c.name.toLowerCase().includes(q.toLowerCase()) || (c.phone||'').includes(q));
+  }).sort(function(a,b) { return (a[1].name||'').localeCompare(b[1].name||'','vi'); }).slice(0,10);
+  if (!results.length) { box.innerHTML = '<div style="padding:10px 14px;font-size:13px;color:var(--text-3)">Không tìm thấy</div>'; box.style.display='block'; return; }
+  box.innerHTML = results.map(function(entry) {
+    var k = entry[0], c = entry[1];
+    return '<div onclick="editCustSelect(\'' + k + '\')" style="padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;display:flex;align-items:center;gap:8px">'
+      + '<div style="width:28px;height:28px;border-radius:50%;background:var(--blue-light);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--blue-dark);flex-shrink:0">' + (c.name[0]||'?').toUpperCase() + '</div>'
+      + '<div><div style="font-weight:600">' + c.name + '</div><div style="font-size:11px;color:var(--text-3)">' + (c.phone||'Chưa có SĐT') + '</div></div>'
+      + '</div>';
+  }).join('');
+  box.style.display = 'block';
+};
+window.editCustSelect = function(k) {
+  var c = allCustomers[k]; if (!c) return;
+  window._editCustKey = k;
+  window._editCustName = c.name;
+  var inp = document.getElementById('edit-cust-input');
+  var lbl = document.getElementById('edit-cust-label');
+  var box = document.getElementById('edit-cust-suggest');
+  var sel = document.getElementById('edit-cust-selected');
+  if (inp) inp.value = '';
+  if (lbl) lbl.textContent = '👤 ' + c.name + (c.phone ? ' · ' + c.phone : '');
+  if (box) box.style.display = 'none';
+  if (sel) sel.style.display = 'flex';
+};
+window.editCustClear = function() {
+  window._editCustKey = '';
+  window._editCustName = 'Khách lẻ';
+  var inp = document.getElementById('edit-cust-input');
+  var lbl = document.getElementById('edit-cust-label');
+  var sel = document.getElementById('edit-cust-selected');
+  if (inp) inp.value = '';
+  if (lbl) lbl.textContent = '👤 Khách lẻ';
+  if (sel) sel.style.display = 'none';
+};
 
 window.editItemQty = function(i, v) {
   if (!window._editItems) return;
@@ -1413,10 +1462,9 @@ window.saveEditOrder = async function() {
   if (!window._editItems.length) { toast('Đơn phải có ít nhất 1 sản phẩm', 'error'); return; }
   var discEl = document.getElementById('edit-discount');
   var paidEl = document.getElementById('edit-paid');
-  var custEl = document.getElementById('edit-cust');
   var discount = discEl ? (parseInt(discEl.value)||0) : 0;
   var paid = paidEl ? (parseInt(paidEl.value)||0) : 0;
-  var custKey = custEl ? (custEl.value||'') : '';
+  var custKey = window._editCustKey || '';
   var sub = window._editItems.reduce(function(s, item) { return s + item.price * item.qty; }, 0);
   var total = Math.max(0, sub - discount);
   var custName = (custKey && allCustomers[custKey]) ? allCustomers[custKey].name : 'Khách lẻ';
@@ -1821,6 +1869,9 @@ document.addEventListener('click', e=>{
 
 window.viewImportReceipt = (key) => {
   const r = allImportReceipts[key]; if(!r) return;
+  currentViewingOrderKey = null;
+  const editBtn = document.getElementById('modal-order-edit-btn');
+  if (editBtn) editBtn.style.display = 'none';
   document.getElementById('modal-order-body').innerHTML =
     '<div style="font-size:12px;color:var(--text-3);margin-bottom:14px">'
     +'<b style="font-size:14px;color:var(--text)">Phiếu nhập hàng</b> · '+fmtDate(r.createdAt)+'</div>'
