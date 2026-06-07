@@ -735,8 +735,8 @@ function renderDashboard(content, actions) {
     <div class="table-wrap">
       <div class="table-header"><span class="table-title">📋 Đơn hàng gần nhất</span><button class="btn btn-outline btn-sm" onclick="navigate('orders')">Xem tất cả</button></div>
       <table><thead><tr><th>Mã đơn</th><th>Thời gian</th><th>Khách hàng</th><th style="text-align:right">Tổng tiền</th></tr></thead>
-      <tbody>${orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(o=>`
-        <tr onclick="viewOrderFromKey('${Object.keys(allOrders).find(k=>allOrders[k]===o)}')" style="cursor:pointer">
+      <tbody>${Object.entries(allOrders).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)).slice(0,6).map(([k,o])=>`
+        <tr onclick="viewOrderFromKey('${k}')" style="cursor:pointer">
           <td class="mono" style="font-weight:700;color:var(--blue)">${o.code||'--'}</td>
           <td style="font-size:11px;color:var(--text-3)">${timeAgo(o.createdAt)}</td>
           <td>${o.customerName||'Khách lẻ'}</td>
@@ -972,7 +972,7 @@ function renderSell(content) {
           </div>
           <button class="btn btn-outline btn-sm" onclick="openAddCustomer()" title="Thêm khách mới" style="flex-shrink:0;padding:7px 10px">+</button>
         </div>
-        <div id="cart-customer-selected" style="display:none;margin-top:6px;padding:7px 10px;background:var(--blue-light);border-radius:7px;font-size:12px;display:flex;align-items:center;justify-content:space-between">
+        <div id="cart-customer-selected" style="display:none;margin-top:6px;padding:7px 10px;background:var(--blue-light);border-radius:7px;font-size:12px;align-items:center;justify-content:space-between">
           <span id="cart-customer-label" style="font-weight:600;color:var(--blue-dark)"></span>
           <button onclick="clearCustomerSelect()" style="background:none;border:none;cursor:pointer;color:var(--blue-dark);font-size:14px">×</button>
         </div>
