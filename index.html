@@ -507,7 +507,7 @@ let currentViewingImportKey = null;
 let invPage = 1; const invPerPage = 50;
 let invSort = 'name'; let invSortDir = 1;
 let custPage = 1; const custPerPage = 50;
-let custSort = 'name';
+let custSort = 'spent_desc'; let custSortDir = -1;
 let ordPage = 1; const ordPerPage = 30;
 
 // ── AUTH ──
@@ -850,7 +850,7 @@ window.filterInventory = () => {
     </div>
     <table>
       <thead><tr>
-        <th>#</th><th>Tên sản phẩm</th><th>Nhóm</th>
+        <th>#</th><th style="${thStyle}" onclick="invSortBy('name')">Tên sản phẩm${arrow('name')}</th><th>Nhóm</th>
         <th style="text-align:right;${thStyle}" onclick="invSortBy('importPrice')">Giá nhập${arrow('importPrice')}</th>
         <th style="text-align:right;${thStyle}" onclick="invSortBy('price')">Giá bán${arrow('price')}</th>
         <th style="text-align:center;${thStyle}" onclick="invSortBy('stock')">Tồn kho${arrow('stock')}</th>
@@ -1528,11 +1528,6 @@ function renderCustomers(content, actions) {
   actions.innerHTML = `
     <div class="flex-gap">
       <div class="search-box"><input type="search" id="cust-search" placeholder="Tên, SĐT..." style="width:220px" oninput="filterCustomers()"></div>
-      <select id="cust-sort" onchange="custSort=this.value;custPage=1;filterCustomers()" style="width:200px">
-        <option value="name">Tên A → Z</option>
-        <option value="spent_desc">Chi tiêu nhiều nhất</option>
-        <option value="orders_desc">Mua nhiều lần nhất</option>
-      </select>
       <button class="btn btn-primary" onclick="openAddCustomer()">+ Thêm KH</button>
     </div>`;
   content.innerHTML = `<div id="cust-table-wrap"></div>`;
@@ -1541,7 +1536,6 @@ function renderCustomers(content, actions) {
 
 window.filterCustomers = () => {
   const q = (document.getElementById('cust-search')?.value||'').toLowerCase();
-  const sort = document.getElementById('cust-sort')?.value || custSort;
 
   // Tính chi tiêu + số đơn từ allOrders
   const statsMap = {};
@@ -1559,9 +1553,12 @@ window.filterCustomers = () => {
     return !q || c.name.toLowerCase().includes(q) || (c.phone||'').includes(q);
   });
 
-  if (sort === 'name') custs.sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'','vi'));
-  else if (sort === 'spent_desc') custs.sort((a,b)=>(statsMap[b[0]]?.spent||0)-(statsMap[a[0]]?.spent||0));
-  else if (sort === 'orders_desc') custs.sort((a,b)=>(statsMap[b[0]]?.lastYear||0)-(statsMap[a[0]]?.lastYear||0));
+  if (custSort === 'name') custs.sort((a,b)=>custSortDir*(a[1].name||'').localeCompare(b[1].name||'','vi'));
+  else if (custSort === 'spent') custs.sort((a,b)=>custSortDir*((statsMap[a[0]]?.spent||0)-(statsMap[b[0]]?.spent||0)));
+  else if (custSort === 'orders') custs.sort((a,b)=>custSortDir*((statsMap[a[0]]?.lastYear||0)-(statsMap[b[0]]?.lastYear||0)));
+
+  const thS = 'cursor:pointer;user-select:none;white-space:nowrap';
+  const ar = (col) => custSort===col ? (custSortDir===1?' ↑':' ↓') : '';
 
   const total=custs.length, pages=Math.ceil(total/custPerPage)||1;
   const slice=custs.slice((custPage-1)*custPerPage, custPage*custPerPage);
@@ -1574,10 +1571,14 @@ window.filterCustomers = () => {
     </div>
     <table>
       <thead><tr>
-        <th>#</th><th>Tên khách hàng</th><th>Số điện thoại</th><th>Địa chỉ</th>
-        <th style="text-align:right">Tổng chi tiêu</th>
-        <th style="text-align:center">Số đơn (năm)</th>
+        <th>#</th>
+        <th style="${thS}" onclick="custSortBy('name')">Tên khách hàng${ar('name')}</th>
+        <th>Số điện thoại</th><th>Địa chỉ</th>
+        <th style="text-align:right;${thS}" onclick="custSortBy('spent')">Tổng chi tiêu${ar('spent')}</th>
+        <th style="text-align:center;${thS}" onclick="custSortBy('orders')">Số đơn (năm)${ar('orders')}</th>
         <th style="text-align:right">Công nợ</th>
+        <th style="text-align:center">Thao tác</th>
+      </tr></thead>
         <th style="text-align:center">Thao tác</th>
       </tr></thead>
       <tbody>
@@ -1611,6 +1612,11 @@ window.filterCustomers = () => {
   </div>`;
 };
 window.custChangePage = p => { custPage=p; filterCustomers(); };
+window.custSortBy = (col) => {
+  if (custSort === col) custSortDir *= -1;
+  else { custSort = col; custSortDir = col==='name' ? 1 : -1; }
+  custPage = 1; filterCustomers();
+};
 
 window.openAddCustomer = () => {
   document.getElementById('modal-customer-title').textContent = 'Thêm khách hàng';
