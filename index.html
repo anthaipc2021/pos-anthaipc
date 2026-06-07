@@ -461,7 +461,8 @@
     <div class="modal-body" id="modal-order-body"></div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="printOrder()">🖨️ In</button>
-      <button class="btn btn-outline" onclick="closeModal(&#39;modal-order&#39;)">Đóng</button>
+      <button class="btn btn-primary btn-sm" id="modal-order-edit-btn" onclick="editOrderModal()" style="display:none">✏️ Sửa đơn</button>
+      <button class="btn btn-outline" onclick="closeModal('modal-order')">Đóng</button>
     </div>
   </div>
 </div>
@@ -499,6 +500,7 @@ let allImportReceipts = {};
 let cart = [];
 let selectedCustomer = null;
 let editingOrderKey = null;
+let currentViewingOrderKey = null;
 
 // pagination
 let invPage = 1; const invPerPage = 50;
@@ -745,8 +747,8 @@ function renderDashboard(content, actions) {
     <div class="table-wrap">
       <div class="table-header"><span class="table-title">📥 Lịch sử nhập hàng gần nhất</span><button class="btn btn-outline btn-sm" onclick="navigate('import')">Nhập hàng</button></div>
       <table><thead><tr><th>Thời gian</th><th>Nhà cung cấp</th><th style="text-align:center">Số SP</th><th style="text-align:right">Tổng nhập</th></tr></thead>
-      <tbody>${Object.entries(allImportReceipts).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)).slice(0,6).map(([rk,r])=>`
-        <tr style="cursor:pointer" onclick="viewImportReceipt('${rk}')">
+      <tbody>${Object.values(allImportReceipts).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,6).map(r=>`
+        <tr>
           <td style="font-size:11px;color:var(--text-3)">${timeAgo(r.createdAt)}</td>
           <td style="font-weight:500">${r.supplierName||'Không rõ'}</td>
           <td style="text-align:center">${(r.items||[]).reduce((s,i)=>s+i.qty,0)}</td>
@@ -765,7 +767,7 @@ const timeAgo = ts => {
   if(diff<86400000) return Math.round(diff/3600000)+' giờ trước';
   return Math.round(diff/86400000)+' ngày trước';
 };
-window.viewOrderFromKey = (key) => { if(key && allOrders[key]) showOrderDetail(allOrders[key]); };
+window.viewOrderFromKey = (key) => { if(key && allOrders[key]) showOrderDetail(allOrders[key], key); };
 
 // ── INVENTORY ──
 function renderInventory(content, actions) {
@@ -1260,10 +1262,11 @@ window.ordChangePage = p => { ordPage=p; filterOrders(); };
 
 window.viewOrder = (key) => {
   const o = allOrders[key]; if(!o) return;
-  showOrderDetail(o);
+  showOrderDetail(o, key);
 };
 
-function showOrderDetail(o) {
+function showOrderDetail(o, key) {
+  currentViewingOrderKey = key || null;
   document.getElementById('modal-order-body').innerHTML = `
   <div style="font-size:12px;color:var(--text-3);margin-bottom:14px">
     <b style="font-size:14px;color:var(--text)">${o.code||'--'}</b> · ${fmtDate(o.createdAt)}
@@ -1293,9 +1296,162 @@ function showOrderDetail(o) {
     <div style="font-size:18px;font-weight:700;color:var(--blue);margin-top:4px">Tổng cộng: ${fmt(o.total)}</div>
     <div style="color:var(--text-3)">Khách trả: ${fmt(o.paid||o.total)}</div>
   </div>`;
+  // Hiện/ẩn nút Sửa tùy có key không
+  const editBtn = document.getElementById('modal-order-edit-btn');
+  if (editBtn) editBtn.style.display = key ? 'inline-flex' : 'none';
   document.getElementById('modal-order').classList.add('open');
 }
 window.printOrder = () => window.print();
+
+// ESC đóng modal
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const modals = ['modal-order','modal-product','modal-customer','modal-supplier'];
+    for (const id of modals) {
+      const el = document.getElementById(id);
+      if (el && el.classList.contains('open')) { el.classList.remove('open'); break; }
+    }
+  }
+});
+
+window.editOrderModal = () => {
+  const key = currentViewingOrderKey;
+  const o = allOrders[key]; if(!key || !o) return;
+  const customers = Object.entries(allCustomers).filter(([,c])=>c.name)
+    .sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'','vi'));
+  const custOptions = '<option value="">-- Khách lẻ --</option>'
+    + customers.map(([k,c])=>`<option value="${k}" ${o.customerKey===k?'selected':''}>${c.name}${c.phone?' · '+c.phone:''}</option>`).join('');
+
+  let itemsHtml = (o.items||[]).map((item, i) => `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px" id="edit-item-row-${i}">
+      <span style="flex:1;font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.name}</span>
+      <label style="font-size:11px;color:var(--text-3)">SL:</label>
+      <input type="number" value="${item.qty}" min="1" style="width:52px;padding:3px 5px;text-align:center"
+        oninput="editItemQty(${i},this.value)" id="edit-qty-${i}">
+      <label style="font-size:11px;color:var(--text-3)">Giá:</label>
+      <input type="number" value="${item.price}" min="0" style="width:90px;padding:3px 5px;text-align:right"
+        oninput="editItemPrice(${i},this.value)" id="edit-price-${i}">
+      <button onclick="removeEditItem(${i})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px;flex-shrink:0">×</button>
+    </div>`).join('');
+
+  document.getElementById('modal-order-body').innerHTML = `
+  <div style="margin-bottom:12px">
+    <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:4px">Khách hàng</label>
+    <select id="edit-cust" style="width:100%;font-size:13px">${custOptions}</select>
+  </div>
+  <div style="margin-bottom:12px">
+    <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:6px">Sản phẩm</label>
+    <div id="edit-items-list">${itemsHtml}</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+    <div>
+      <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:4px">Giảm giá (đ)</label>
+      <input type="number" id="edit-discount" value="${o.discount||0}" style="width:100%;padding:6px 10px;font-size:13px">
+    </div>
+    <div>
+      <label style="font-size:12px;font-weight:600;color:var(--text-2);display:block;margin-bottom:4px">Khách trả (đ)</label>
+      <input type="number" id="edit-paid" value="${o.paid||o.total||0}" style="width:100%;padding:6px 10px;font-size:13px">
+    </div>
+  </div>
+  <div id="edit-order-total" style="text-align:right;font-size:14px;font-weight:700;color:var(--blue);padding:8px 0;border-top:1px solid var(--border)">
+    Tổng cộng: ${fmt(o.total)}
+  </div>`;
+
+  // Lưu bản sao items để edit
+  window._editItems = JSON.parse(JSON.stringify(o.items||[]));
+  updateEditTotal();
+
+  // Đổi footer sang chế độ Lưu/Hủy
+  const footer = document.querySelector('#modal-order .modal-footer');
+  footer.innerHTML = `
+    <button class="btn btn-outline" onclick="cancelEditOrder('${key}')">↩ Hủy</button>
+    <button class="btn btn-success" onclick="saveEditOrder('${key}')">💾 Lưu thay đổi</button>`;
+};
+
+window.editItemQty = (i, v) => {
+  if (!window._editItems) return;
+  window._editItems[i].qty = Math.max(1, parseInt(v)||1);
+  updateEditTotal();
+};
+window.editItemPrice = (i, v) => {
+  if (!window._editItems) return;
+  window._editItems[i].price = parseInt(v)||0;
+  updateEditTotal();
+};
+window.removeEditItem = (i) => {
+  if (!window._editItems) return;
+  window._editItems.splice(i, 1);
+  // Re-render items list
+  const list = document.getElementById('edit-items-list');
+  if (!list) return;
+  list.innerHTML = window._editItems.map((item, idx) => `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px" id="edit-item-row-${idx}">
+      <span style="flex:1;font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.name}</span>
+      <label style="font-size:11px;color:var(--text-3)">SL:</label>
+      <input type="number" value="${item.qty}" min="1" style="width:52px;padding:3px 5px;text-align:center"
+        oninput="editItemQty(${idx},this.value)" id="edit-qty-${idx}">
+      <label style="font-size:11px;color:var(--text-3)">Giá:</label>
+      <input type="number" value="${item.price}" min="0" style="width:90px;padding:3px 5px;text-align:right"
+        oninput="editItemPrice(${idx},this.value)" id="edit-price-${idx}">
+      <button onclick="removeEditItem(${idx})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:16px;flex-shrink:0">×</button>
+    </div>`).join('');
+  updateEditTotal();
+};
+
+function updateEditTotal() {
+  if (!window._editItems) return;
+  const sub = window._editItems.reduce((s,i)=>s+i.price*i.qty, 0);
+  const disc = parseInt(document.getElementById('edit-discount')?.value)||0;
+  const total = Math.max(0, sub - disc);
+  const el = document.getElementById('edit-order-total');
+  if (el) el.textContent = 'Tổng cộng: ' + fmt(total);
+}
+
+window.cancelEditOrder = (key) => {
+  const o = allOrders[key]; if(!o) return;
+  showOrderDetail(o, key);
+  // Khôi phục footer
+  const footer = document.querySelector('#modal-order .modal-footer');
+  footer.innerHTML = `
+    <button class="btn btn-outline" onclick="printOrder()">🖨️ In</button>
+    <button class="btn btn-primary btn-sm" id="modal-order-edit-btn" onclick="editOrderModal()" style="display:inline-flex">✏️ Sửa đơn</button>
+    <button class="btn btn-outline" onclick="closeModal('modal-order')">Đóng</button>`;
+};
+
+window.saveEditOrder = async (key) => {
+  const o = allOrders[key]; if(!o || !window._editItems) return;
+  if (!window._editItems.length) { toast('Đơn phải có ít nhất 1 sản phẩm','error'); return; }
+  const discount = parseInt(document.getElementById('edit-discount')?.value)||0;
+  const paid = parseInt(document.getElementById('edit-paid')?.value)||0;
+  const sub = window._editItems.reduce((s,i)=>s+i.price*i.qty, 0);
+  const total = Math.max(0, sub - discount);
+  const custKey = document.getElementById('edit-cust')?.value||'';
+  const custName = custKey && allCustomers[custKey] ? allCustomers[custKey].name : 'Khách lẻ';
+  const custPhone = custKey && allCustomers[custKey] ? (allCustomers[custKey].phone||'') : '';
+
+  const updatedOrder = {
+    ...o,
+    items: window._editItems.map(i=>({...i, subtotal: i.price*i.qty})),
+    discount, paid, total,
+    customerKey: custKey,
+    customerName: custName,
+    customerPhone: custPhone,
+    lastEdited: Date.now()
+  };
+  await set(ref(db, 'orders/' + key), updatedOrder);
+  allOrders[key] = updatedOrder;
+  window._editItems = null;
+  toast('Đã lưu thay đổi đơn hàng','success');
+  showOrderDetail(updatedOrder, key);
+  // Khôi phục footer
+  const footer = document.querySelector('#modal-order .modal-footer');
+  footer.innerHTML = `
+    <button class="btn btn-outline" onclick="printOrder()">🖨️ In</button>
+    <button class="btn btn-primary btn-sm" id="modal-order-edit-btn" onclick="editOrderModal()" style="display:inline-flex">✏️ Sửa đơn</button>
+    <button class="btn btn-outline" onclick="closeModal('modal-order')">Đóng</button>`;
+  // Refresh nếu đang ở trang orders
+  if (currentPage === 'orders') filterOrders();
+};
 
 // ── CUSTOMERS ──
 function renderCustomers(content, actions) {
@@ -1528,21 +1684,11 @@ function renderImport(content, actions) {
     </div>
     <div class="sale-right">
       <div class="cart-header">📦 Phiếu nhập hàng</div>
-      <div class="customer-select" style="position:relative">
-        <div style="display:flex;gap:6px;align-items:center">
-          <div style="position:relative;flex:1">
-            <input type="text" id="imp-supplier-input" placeholder="🏭 Tìm NCC / Khách hàng..."
-              style="width:100%;font-size:13px;padding-right:28px"
-              oninput="searchSupplierSuggest(this.value)" autocomplete="off">
-            <button onclick="clearSupplierSelect()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-3);font-size:16px;line-height:1">×</button>
-          </div>
-        </div>
-        <div id="imp-supplier-selected" style="display:none;margin-top:6px;padding:7px 10px;background:var(--blue-light);border-radius:7px;font-size:12px;display:flex;align-items:center;justify-content:space-between">
-          <span id="imp-supplier-label" style="font-weight:600;color:var(--blue-dark)"></span>
-          <button onclick="clearSupplierSelect()" style="background:none;border:none;cursor:pointer;color:var(--blue-dark);font-size:14px">×</button>
-        </div>
-        <div id="imp-supplier-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:200;background:#fff;border:1.5px solid var(--blue);border-radius:0 0 10px 10px;max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(26,111,212,0.15)"></div>
-        <input type="hidden" id="imp-supplier" value="">
+      <div class="customer-select">
+        <select id="imp-supplier" style="width:100%;font-size:13px">
+          <option value="">-- Chọn NCC / Khách hàng --</option>
+          ${suppOptions}
+        </select>
       </div>
       <div class="cart-items" id="imp-items">
         <div class="empty-state" style="padding:30px"><div class="icon">📦</div>Chưa có sản phẩm</div>
@@ -1617,88 +1763,6 @@ window.impSetQty=(i,v)=>{importCart[i].qty=Math.max(1,parseInt(v)||1);renderImpo
 window.impSetPrice=(i,v)=>{importCart[i].importPrice=parseInt(v)||0;renderImportCart();};
 window.impRemove=(i)=>{importCart.splice(i,1);renderImportCart();};
 
-window.searchSupplierSuggest = (q) => {
-  const box = document.getElementById('imp-supplier-suggest'); if(!box) return;
-  q = q.trim();
-  if (!q) { box.style.display='none'; return; }
-  const ql = q.toLowerCase();
-  const suppResults = Object.entries(allSuppliers)
-    .filter(([k,s]) => s.name && s.name.toLowerCase().includes(ql))
-    .map(([k,s]) => ({id:'supp_'+k, name:s.name, phone:s.phone||'', tag:'NCC'}));
-  const custResults = Object.entries(allCustomers)
-    .filter(([k,c]) => c.name && (c.name.toLowerCase().includes(ql)||(c.phone||'').includes(q)))
-    .map(([k,c]) => ({id:'cust_'+k, name:c.name, phone:c.phone||'', tag:'KH'}));
-  const all = [...suppResults, ...custResults].sort((a,b)=>a.name.localeCompare(b.name,'vi')).slice(0,12);
-  if (!all.length) {
-    box.innerHTML = '<div style="padding:12px 14px;font-size:13px;color:var(--text-3)">Không tìm thấy</div>';
-    box.style.display='block'; return;
-  }
-  box.innerHTML = all.map(r => {
-    const badgeClass = r.tag==='NCC' ? 'badge-blue' : 'badge-green';
-    return '<div onclick="selectSupplierFromSuggest(\'' + r.id + '\')" '
-      +'style="padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;display:flex;align-items:center;gap:8px;transition:background .1s" '
-      +'onmouseenter="this.style.background=\'var(--blue-light)\'" onmouseleave="this.style.background=\'\'"><span class="badge '+badgeClass+'" style="font-size:10px;flex-shrink:0">'+r.tag+'</span>'
-      +'<div><div style="font-weight:600">'+r.name+'</div>'+(r.phone?'<div style="font-size:11px;color:var(--text-3)">'+r.phone+'</div>':'')+'</div></div>';
-  }).join('');
-  box.style.display='block';
-};
-window.selectSupplierFromSuggest = (id) => {
-  const isSupp = id.startsWith('supp_');
-  const key = id.slice(5);
-  const obj = isSupp ? allSuppliers[key] : allCustomers[key];
-  if(!obj) return;
-  document.getElementById('imp-supplier').value = id;
-  const inp = document.getElementById('imp-supplier-input');
-  const sel = document.getElementById('imp-supplier-selected');
-  const lbl = document.getElementById('imp-supplier-label');
-  if(inp) inp.value='';
-  if(lbl) lbl.textContent = (isSupp?'[NCC] ':'[KH] ') + obj.name + (obj.phone?' · '+obj.phone:'');
-  if(sel) sel.style.display='flex';
-  const box = document.getElementById('imp-supplier-suggest');
-  if(box) box.style.display='none';
-};
-window.clearSupplierSelect = () => {
-  const hid=document.getElementById('imp-supplier'); if(hid) hid.value='';
-  const inp=document.getElementById('imp-supplier-input');
-  const sel=document.getElementById('imp-supplier-selected');
-  const box=document.getElementById('imp-supplier-suggest');
-  if(inp) inp.value='';
-  if(sel) sel.style.display='none';
-  if(box) box.style.display='none';
-};
-document.addEventListener('click', e=>{
-  if(!e.target.closest('#imp-supplier-input') && !e.target.closest('#imp-supplier-suggest'))
-    { const b=document.getElementById('imp-supplier-suggest'); if(b) b.style.display='none'; }
-});
-
-window.viewImportReceipt = (key) => {
-  const r = allImportReceipts[key]; if(!r) return;
-  document.getElementById('modal-order-body').innerHTML =
-    '<div style="font-size:12px;color:var(--text-3);margin-bottom:14px">'
-    +'<b style="font-size:14px;color:var(--text)">Phiếu nhập hàng</b> · '+fmtDate(r.createdAt)+'</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;font-size:13px">'
-    +'<div><b>Nhà cung cấp:</b> '+(r.supplierName||'Không có')+'</div>'
-    +'<div><b>Ghi chú:</b> '+(r.note||'--')+'</div></div>'
-    +'<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:var(--bg)">'
-    +'<th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Sản phẩm</th>'
-    +'<th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">SL</th>'
-    +'<th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Giá nhập</th>'
-    +'<th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Thành tiền</th>'
-    +'</tr></thead><tbody>'
-    +(r.items||[]).map(i=>'<tr>'
-      +'<td style="padding:8px;border-bottom:1px solid var(--border)">'+i.name+'</td>'
-      +'<td style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">'+i.qty+'</td>'
-      +'<td style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">'+fmt(i.importPrice)+'</td>'
-      +'<td style="padding:8px;text-align:right;border-bottom:1px solid var(--border);font-weight:700">'+fmt(i.importPrice*i.qty)+'</td>'
-      +'</tr>').join('')
-    +'</tbody></table>'
-    +'<div style="margin-top:12px;text-align:right;font-size:13px">'
-    +'<div style="font-size:18px;font-weight:700;color:var(--blue);margin-top:4px">Tổng nhập: '+fmt(r.total)+'</div>'
-    +'<div style="color:var(--text-3)">'+(r.items||[]).reduce((s,i)=>s+i.qty,0)+' cái · '+(r.items||[]).length+' mặt hàng</div>'
-    +'</div>';
-  document.getElementById('modal-order').classList.add('open');
-};
-
 window.createImportReceipt = async () => {
   if(!importCart.length){toast('Chưa có sản phẩm','error');return;}
   const now=Date.now();
@@ -1731,7 +1795,7 @@ window.createImportReceipt = async () => {
 };
 
 // ── CATALOG ──
-let catalogView = 'list'; // 'grid' | 'list'
+let catalogView = 'grid'; // 'grid' | 'list'
 let catalogPage = 1; const catalogPerPage = 48;
 
 function renderCatalog(content, actions) {
@@ -1756,8 +1820,8 @@ function renderCatalog(content, actions) {
         <option value="stock_desc">Tồn kho nhiều nhất</option>
       </select>
       <div class="catalog-view-mode">
-        <button class="view-btn" id="vbtn-grid" onclick="setCatalogView('grid')" title="Dạng lưới">⊞</button>
-        <button class="view-btn active" id="vbtn-list" onclick="setCatalogView('list')" title="Dạng danh sách">☰</button>
+        <button class="view-btn active" id="vbtn-grid" onclick="setCatalogView('grid')" title="Dạng lưới">⊞</button>
+        <button class="view-btn" id="vbtn-list" onclick="setCatalogView('list')" title="Dạng danh sách">☰</button>
       </div>
     </div>`;
   content.innerHTML = `<div id="cat-wrap"></div>`;
