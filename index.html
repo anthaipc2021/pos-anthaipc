@@ -2248,17 +2248,35 @@ window.saveEditImport = async function() {
 };
 let catalogView = 'list'; // 'grid' | 'list'
 let catalogPage = 1; const catalogPerPage = 48;
+let catalogSelectedGroup = ''; // '' = tất cả
+let allGroups = {}; // { key: { name, icon } } từ Firebase
+
+const DEFAULT_GROUPS = ['CPU','RAM','Mainboard','VGA','SSD','HDD','Nguồn','Case','Màn hình','Bàn Phím','Chuột','Tai Nghe','LAPTOP','Phụ Kiện','Hàng mới nhập'];
+
+async function loadGroups() {
+  const snap = await get(ref(db, 'groups'));
+  allGroups = snap.val() || {};
+  // Nếu chưa có gì trong Firebase, seed từ DEFAULT_GROUPS
+  if (!Object.keys(allGroups).length) {
+    const updates = {};
+    DEFAULT_GROUPS.forEach(name => {
+      const key = name.replace(/[^a-zA-Z0-9]/g,'_');
+      updates[key] = { name, icon: catIcons[name] || '🖥️' };
+    });
+    await update(ref(db, 'groups'), updates);
+    allGroups = updates;
+  }
+}
+
+function getGroupList() {
+  return Object.entries(allGroups).sort((a,b)=>(a[1].name||'').localeCompare(b[1].name||'','vi'));
+}
 
 function renderCatalog(content, actions) {
   catalogPage = 1;
-  const groups = [...new Set(Object.values(allProducts).map(p=>p.group||p.category||'').filter(Boolean))].sort();
   actions.innerHTML = `
     <div class="flex-gap">
       <div class="search-box"><input type="search" id="cat-search" placeholder="Tìm tên sản phẩm..." style="width:220px" oninput="filterCatalog()"></div>
-      <select id="cat-group" onchange="filterCatalog()" style="width:160px">
-        <option value="">Tất cả nhóm</option>
-        ${groups.map(g=>`<option>${g}</option>`).join('')}
-      </select>
       <select id="cat-stock" onchange="filterCatalog()" style="width:130px">
         <option value="">Tất cả</option>
         <option value="in">Còn hàng</option>
@@ -2275,9 +2293,128 @@ function renderCatalog(content, actions) {
         <button class="view-btn active" id="vbtn-list" onclick="setCatalogView('list')" title="Dạng danh sách">☰</button>
       </div>
     </div>`;
-  content.innerHTML = `<div id="cat-wrap"></div>`;
+
+  content.innerHTML = `
+    <div style="display:grid;grid-template-columns:200px 1fr;gap:14px;min-height:calc(100vh - var(--header-h) - 44px)">
+      <!-- SIDEBAR NHÓM -->
+      <div class="table-wrap" style="display:flex;flex-direction:column;align-self:start;position:sticky;top:0">
+        <div class="table-header" style="padding:12px 14px">
+          <span class="table-title" style="font-size:13px">🏷️ Nhóm hàng</span>
+          <button class="btn btn-primary btn-sm" onclick="openAddGroup()" title="Thêm nhóm mới" style="padding:4px 9px;font-size:12px">+</button>
+        </div>
+        <div id="cat-group-list" style="overflow-y:auto;max-height:calc(100vh - 160px)"></div>
+      </div>
+      <!-- NỘI DUNG -->
+      <div id="cat-wrap"></div>
+    </div>`;
+
+  loadGroups().then(() => { renderGroupSidebar(); filterCatalog(); });
+}
+
+function renderGroupSidebar() {
+  const el = document.getElementById('cat-group-list'); if(!el) return;
+  const groups = getGroupList();
+  // Đếm SP theo nhóm
+  const countMap = {};
+  Object.values(allProducts).forEach(p => {
+    const g = p.group || p.category || '';
+    if(g) countMap[g] = (countMap[g]||0) + 1;
+  });
+  const totalAll = Object.values(allProducts).filter(p=>p.name).length;
+
+  const itemStyle = (active) => 'display:flex;align-items:center;gap:8px;padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;transition:background .1s;'
+    + (active ? 'background:var(--blue);color:#fff;font-weight:600;' : 'color:var(--text);');
+
+  el.innerHTML = `
+    <div onclick="selectCatalogGroup('')" style="${itemStyle(catalogSelectedGroup==='')}">
+      <span style="flex:1">Tất cả</span>
+      <span style="font-size:11px;opacity:.7">${totalAll}</span>
+    </div>`
+    + groups.map(([k,g]) => {
+      const cnt = countMap[g.name] || 0;
+      const active = catalogSelectedGroup === g.name;
+      const bg = active ? 'background:var(--blue);' : '';
+      const col = active ? 'color:#fff;' : 'color:var(--text);';
+      return '<div style="' + itemStyle(active) + 'position:relative" '
+        + 'onmouseenter="this.querySelector(\'.grp-actions\').style.display=\'flex\'" '
+        + 'onmouseleave="this.querySelector(\'.grp-actions\').style.display=\'none\'">'
+        + '<span style="font-size:15px;flex-shrink:0">' + (g.icon||'🖥️') + '</span>'
+        + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="selectCatalogGroup(\'' + g.name.replace(/'/g,"\\'") + '\')">' + g.name + '</span>'
+        + '<span style="font-size:11px;opacity:.7;flex-shrink:0" onclick="selectCatalogGroup(\'' + g.name.replace(/'/g,"\\'") + '\')">' + (cnt||'') + '</span>'
+        + '<div class="grp-actions" style="display:none;gap:2px;flex-shrink:0;margin-left:4px">'
+        + '<button onclick="event.stopPropagation();openEditGroup(\'' + k + '\')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;border-radius:4px;' + (active?'color:#fff':'color:var(--blue-dark)') + '" title="Sửa">✏️</button>'
+        + '<button onclick="event.stopPropagation();deleteGroup(\'' + k + '\',\'' + g.name.replace(/'/g,"\\'") + '\')" style="background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;border-radius:4px;' + (active?'color:#fff':'color:var(--red)') + '" title="Xóa">🗑</button>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+}
+
+window.selectCatalogGroup = (name) => {
+  catalogSelectedGroup = name;
+  catalogPage = 1;
+  renderGroupSidebar();
+  filterCatalog();
+};
+
+// CRUD nhóm
+window.openAddGroup = () => {
+  const name = prompt('Tên nhóm mới:');
+  if(!name || !name.trim()) return;
+  const icon = prompt('Icon (emoji, để trống = 🖥️):') || '🖥️';
+  saveGroup(null, name.trim(), icon.trim()||'🖥️');
+};
+
+window.openEditGroup = (key) => {
+  const g = allGroups[key]; if(!g) return;
+  const name = prompt('Tên nhóm:', g.name);
+  if(!name || !name.trim()) return;
+  const icon = prompt('Icon:', g.icon||'🖥️');
+  saveGroup(key, name.trim(), icon||g.icon||'🖥️', g.name);
+};
+
+async function saveGroup(key, name, icon, oldName) {
+  const k = key || name.replace(/[^a-zA-Z0-9]/g,'_') + '_' + Date.now().toString(36);
+  await set(ref(db,'groups/'+k), { name, icon });
+  allGroups[k] = { name, icon };
+  // Nếu đổi tên → cập nhật tất cả SP dùng nhóm cũ
+  if(oldName && oldName !== name) {
+    const updates = {};
+    Object.entries(allProducts).forEach(([pk,p]) => {
+      if((p.group||p.category||'') === oldName) {
+        updates['products/'+pk+'/group'] = name;
+        allProducts[pk].group = name;
+      }
+    });
+    if(Object.keys(updates).length) await update(ref(db), updates);
+    if(catalogSelectedGroup === oldName) catalogSelectedGroup = name;
+    toast('Đã đổi tên nhóm và cập nhật ' + Object.keys(updates).length + ' sản phẩm', 'success');
+  } else {
+    toast(key ? 'Đã cập nhật nhóm' : 'Đã thêm nhóm mới', 'success');
+  }
+  renderGroupSidebar();
   filterCatalog();
 }
+
+window.deleteGroup = async (key, name) => {
+  const cnt = Object.values(allProducts).filter(p=>(p.group||p.category||'')===name).length;
+  const msg = cnt > 0
+    ? 'Nhóm "'+name+'" có '+cnt+' sản phẩm.\nXóa nhóm sẽ bỏ phân nhóm của các SP này. Tiếp tục?'
+    : 'Xóa nhóm "'+name+'"?';
+  if(!confirm(msg)) return;
+  await remove(ref(db,'groups/'+key));
+  delete allGroups[key];
+  if(cnt > 0) {
+    const updates = {};
+    Object.entries(allProducts).forEach(([pk,p]) => {
+      if((p.group||p.category||'') === name) { updates['products/'+pk+'/group'] = ''; allProducts[pk].group = ''; }
+    });
+    await update(ref(db), updates);
+  }
+  if(catalogSelectedGroup === name) catalogSelectedGroup = '';
+  toast('Đã xóa nhóm', 'success');
+  renderGroupSidebar();
+  filterCatalog();
+};
 
 const catIcons = {
   'CPU':'🔲','RAM':'📊','Mainboard':'🖥️','VGA':'🎮','SSD':'💾','HDD':'💿',
@@ -2296,7 +2433,7 @@ window.setCatalogView = (v) => {
 
 window.filterCatalog = () => {
   const q = (document.getElementById('cat-search')?.value||'').toLowerCase();
-  const grp = document.getElementById('cat-group')?.value||'';
+  const grp = catalogSelectedGroup;
   const sf = document.getElementById('cat-stock')?.value||'';
   const sort = document.getElementById('cat-sort')?.value||'name';
 
