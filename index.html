@@ -750,7 +750,7 @@ function renderDashboard(content, actions) {
     <div class="table-wrap">
       <div class="table-header"><span class="table-title">📥 Lịch sử nhập hàng gần nhất</span><button class="btn btn-outline btn-sm" onclick="navigate('import')">Nhập hàng</button></div>
       <table><thead><tr><th>Thời gian</th><th>Nhà cung cấp</th><th style="text-align:center">Số SP</th><th style="text-align:right">Tổng nhập</th></tr></thead>
-      <tbody>${Object.entries(allImportReceipts).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)).slice(0,6).map(([rk,r])=>`
+      <tbody>${Object.entries(allImportReceipts).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)).slice(0,4).map(([rk,r])=>`
         <tr style="cursor:pointer" onclick="viewImportReceipt('${rk}')">
           <td style="font-size:11px;color:var(--text-3)">${timeAgo(r.createdAt)}</td>
           <td style="font-weight:500">${r.supplierName||'Không rõ'}</td>
@@ -1782,50 +1782,67 @@ function renderImport(content, actions) {
     ...Object.entries(allCustomers).filter(([k,c])=>c.name).map(([k,c])=>`<option value="cust_${k}">[KH] ${c.name}${c.phone?' · '+c.phone:''}</option>`)
   ].join('');
   content.innerHTML = `
-  <div style="display:flex;flex-direction:column;gap:16px;height:calc(100vh - var(--header-h) - 40px);overflow:hidden">
-  <div style="display:grid;grid-template-columns:1fr 360px;gap:16px;flex:1;overflow:hidden">
-    <div style="display:flex;flex-direction:column;gap:12px;overflow:hidden">
-      <div class="flex-gap">
-        <div class="search-box" style="flex:1"><input type="search" id="imp-search" placeholder="Tìm sản phẩm..." style="width:100%" oninput="searchImport(this.value)"></div>
-        <button class="btn btn-outline" onclick="openAddProductFromImport()" title="Tạo sản phẩm mới nhanh" style="white-space:nowrap">+ Tạo SP mới</button>
+  <div style="display:flex;flex-direction:column;gap:14px;height:calc(100vh - var(--header-h) - 40px);overflow-y:auto">
+
+  <!-- HÀNG 1: Tìm SP (trái) + Thông tin phiếu (phải) -->
+  <div style="display:grid;grid-template-columns:1fr 400px;gap:14px">
+    <!-- Tìm sản phẩm -->
+    <div class="table-wrap" style="display:flex;flex-direction:column">
+      <div class="table-header" style="flex-shrink:0">
+        <span class="table-title">🔍 Tìm sản phẩm để thêm vào phiếu</span>
+        <button class="btn btn-outline btn-sm" onclick="openAddProductFromImport()">+ Tạo SP mới</button>
       </div>
-      <div class="product-search-results" id="imp-results">
-        <div class="empty-state"><div class="icon">🔍</div>Gõ tên sản phẩm để tìm</div>
+      <div class="flex-gap" style="padding:10px 14px 0;flex-shrink:0">
+        <div class="search-box" style="flex:1"><input type="search" id="imp-search" placeholder="Nhập tên sản phẩm..." style="width:100%" oninput="searchImport(this.value)"></div>
+      </div>
+      <div id="imp-results" style="flex:1;overflow-y:auto;max-height:200px">
+        <div class="empty-state" style="padding:24px"><div class="icon">🔍</div>Gõ tên để tìm</div>
       </div>
     </div>
-    <div class="sale-right">
-      <div class="cart-header">📦 Phiếu nhập hàng</div>
-      <div class="customer-select" style="position:relative">
-        <div style="display:flex;gap:6px;align-items:center">
-          <div style="position:relative;flex:1">
+    <!-- Thông tin phiếu nhập -->
+    <div class="table-wrap">
+      <div class="table-header"><span class="table-title">📦 Thông tin phiếu nhập</span></div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+        <div style="position:relative">
+          <div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px">Nhà cung cấp / Khách hàng</div>
+          <div style="position:relative">
             <input type="text" id="imp-supplier-input" placeholder="🏭 Tìm NCC / Khách hàng..."
               style="width:100%;font-size:13px;padding-right:28px"
               oninput="searchSupplierSuggest(this.value)" autocomplete="off">
             <button onclick="clearSupplierSelect()" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-3);font-size:16px;line-height:1">×</button>
           </div>
+          <div id="imp-supplier-selected" style="display:none;margin-top:6px;padding:7px 10px;background:var(--blue-light);border-radius:7px;font-size:12px;align-items:center;justify-content:space-between">
+            <span id="imp-supplier-label" style="font-weight:600;color:var(--blue-dark)"></span>
+            <button onclick="clearSupplierSelect()" style="background:none;border:none;cursor:pointer;color:var(--blue-dark);font-size:14px">×</button>
+          </div>
+          <div id="imp-supplier-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:200;background:#fff;border:1.5px solid var(--blue);border-radius:0 0 10px 10px;max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(26,111,212,0.15)"></div>
+          <input type="hidden" id="imp-supplier" value="">
         </div>
-        <div id="imp-supplier-selected" style="display:none;margin-top:6px;padding:7px 10px;background:var(--blue-light);border-radius:7px;font-size:12px;align-items:center;justify-content:space-between">
-          <span id="imp-supplier-label" style="font-weight:600;color:var(--blue-dark)"></span>
-          <button onclick="clearSupplierSelect()" style="background:none;border:none;cursor:pointer;color:var(--blue-dark);font-size:14px">×</button>
-        </div>
-        <div id="imp-supplier-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:200;background:#fff;border:1.5px solid var(--blue);border-radius:0 0 10px 10px;max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(26,111,212,0.15)"></div>
-        <input type="hidden" id="imp-supplier" value="">
-      </div>
-      <div class="cart-items" id="imp-items">
-        <div class="empty-state" style="padding:30px"><div class="icon">📦</div>Chưa có sản phẩm</div>
-      </div>
-      <div class="cart-summary">
-        <div class="summary-row" style="font-weight:700;font-size:16px">
-          <span>Tổng nhập</span>
-          <span class="price-tag" id="imp-total">0đ</span>
-        </div>
-        <div class="form-group" style="margin-top:10px">
-          <label style="font-size:12px;font-weight:600;color:var(--text-2)">Ghi chú</label>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px">Ghi chú</div>
           <textarea id="imp-note" rows="2" style="width:100%;resize:none" placeholder="Ghi chú phiếu nhập..."></textarea>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid var(--border)">
+          <span style="font-size:14px;font-weight:700">Tổng nhập:</span>
+          <span class="price-tag" id="imp-total" style="font-size:18px;font-weight:700">0đ</span>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- HÀNG 2: Bảng sản phẩm đang nhập - FULL WIDTH -->
+  <div class="table-wrap" id="imp-cart-wrap">
+    <div class="table-header">
+      <span class="table-title">🛒 Danh sách sản phẩm nhập</span>
+      <span class="text-muted" style="font-size:12px" id="imp-cart-count">0 sản phẩm</span>
+      <button class="btn btn-sm" style="background:var(--red-light);color:var(--red);margin-left:auto" onclick="importCart=[];renderImportCart()">🗑 Xóa tất cả</button>
+    </div>
+    <div id="imp-items">
+      <div class="empty-state" style="padding:32px"><div class="icon">📦</div>Chưa có sản phẩm — tìm và click để thêm</div>
+    </div>
+  </div>
+
+  <!-- HÀNG 3: Lịch sử nhập hàng gần nhất -->
   <div class="table-wrap" style="flex-shrink:0">
     <div class="table-header">
       <span class="table-title">📥 Lịch sử nhập hàng gần nhất</span>
@@ -1839,13 +1856,13 @@ function renderImport(content, actions) {
         <th style="text-align:center">Thao tác</th>
       </tr></thead>
       <tbody>
-        ${Object.entries(allImportReceipts).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)).slice(0,10).map(([rk,r])=>`
+        ${Object.entries(allImportReceipts).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)).slice(0,4).map(([rk,r])=>`
         <tr style="cursor:pointer" onclick="viewImportReceipt('${rk}')">
           <td style="font-size:12px;color:var(--text-3)">${fmtDate(r.createdAt)}</td>
           <td style="font-weight:500">${r.supplierName||'Không rõ'}</td>
           <td style="text-align:center">${(r.items||[]).reduce((s,i)=>s+i.qty,0)}</td>
           <td style="text-align:right" class="price-tag">${fmt(r.total)}</td>
-          <td style="font-size:12px;color:var(--text-3);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.note||'--'}</td>
+          <td style="font-size:12px;color:var(--text-3);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.note||'--'}</td>
           <td style="text-align:center">
             <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewImportReceipt('${rk}')">👁 Xem</button>
           </td>
@@ -1853,6 +1870,7 @@ function renderImport(content, actions) {
       </tbody>
     </table>
   </div>
+
   </div>`;
 }
 
@@ -1891,21 +1909,54 @@ window.addToImport = (key) => {
 
 function renderImportCart() {
   const el=document.getElementById('imp-items'); if(!el) return;
-  if(!importCart.length){el.innerHTML='<div class="empty-state" style="padding:30px"><div class="icon">📦</div>Chưa có sản phẩm</div>';document.getElementById('imp-total').textContent='0đ';return;}
-  el.innerHTML=importCart.map((item,i)=>`
-    <div class="cart-item">
-      <div class="cart-item-name">${item.name}</div>
-      <div class="cart-item-controls">
-        <button class="qty-btn" onclick="impChangeQty(${i},-1)">−</button>
-        <input class="qty-input" type="number" value="${item.qty}" min="1" onchange="impSetQty(${i},this.value)">
-        <button class="qty-btn" onclick="impChangeQty(${i},1)">+</button>
-        <span style="font-size:11px;color:var(--text-3)">giá:</span>
-        <input type="number" value="${item.importPrice}" style="width:90px;text-align:right;padding:3px 6px" onchange="impSetPrice(${i},this.value)">
-        <button class="btn-remove" onclick="impRemove(${i})">×</button>
-      </div>
-    </div>`).join('');
+  const countEl=document.getElementById('imp-cart-count');
+  if(!importCart.length){
+    el.innerHTML='<div class="empty-state" style="padding:32px"><div class="icon">📦</div>Chưa có sản phẩm — tìm và click để thêm</div>';
+    if(document.getElementById('imp-total')) document.getElementById('imp-total').textContent='0đ';
+    if(countEl) countEl.textContent='0 sản phẩm';
+    return;
+  }
   const tot=importCart.reduce((s,i)=>s+i.importPrice*i.qty,0);
-  document.getElementById('imp-total').textContent=fmt(tot);
+  el.innerHTML=`<table style="width:100%;border-collapse:collapse">
+    <thead><tr>
+      <th style="padding:9px 14px;text-align:left;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em">#</th>
+      <th style="padding:9px 14px;text-align:left;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em">Tên sản phẩm</th>
+      <th style="padding:9px 14px;text-align:center;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;width:160px">Số lượng</th>
+      <th style="padding:9px 14px;text-align:right;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;width:160px">Giá nhập (đ)</th>
+      <th style="padding:9px 14px;text-align:right;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;width:140px">Thành tiền</th>
+      <th style="padding:9px 14px;text-align:center;background:var(--bg);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;width:60px"></th>
+    </tr></thead>
+    <tbody>
+    ${importCart.map((item,i)=>`
+      <tr style="border-bottom:1px solid var(--border);transition:background .1s" onmouseenter="this.style.background='var(--blue-light)'" onmouseleave="this.style.background=''">
+        <td style="padding:10px 14px;color:var(--text-3);font-size:12px">${i+1}</td>
+        <td style="padding:10px 14px;font-weight:600;font-size:13px">${item.name}</td>
+        <td style="padding:10px 14px;text-align:center">
+          <div style="display:flex;align-items:center;justify-content:center;gap:4px">
+            <button class="qty-btn" onclick="impChangeQty(${i},-1)">−</button>
+            <input class="qty-input" type="number" value="${item.qty}" min="1" style="width:54px" onchange="impSetQty(${i},this.value)">
+            <button class="qty-btn" onclick="impChangeQty(${i},1)">+</button>
+          </div>
+        </td>
+        <td style="padding:10px 14px;text-align:right">
+          <input type="number" value="${item.importPrice}" style="width:130px;text-align:right;padding:5px 8px;font-weight:600;font-size:13px" onchange="impSetPrice(${i},this.value)">
+        </td>
+        <td style="padding:10px 14px;text-align:right;font-weight:700;color:var(--blue);font-size:13px">${fmt(item.importPrice*item.qty)}</td>
+        <td style="padding:10px 14px;text-align:center">
+          <button class="btn btn-sm" style="background:var(--red-light);color:var(--red);padding:4px 8px" onclick="impRemove(${i})">🗑</button>
+        </td>
+      </tr>`).join('')}
+    </tbody>
+    <tfoot>
+      <tr style="background:var(--bg)">
+        <td colspan="4" style="padding:12px 14px;text-align:right;font-weight:700;font-size:14px">Tổng cộng:</td>
+        <td style="padding:12px 14px;text-align:right;font-weight:700;font-size:16px;color:var(--blue)">${fmt(tot)}</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>`;
+  if(document.getElementById('imp-total')) document.getElementById('imp-total').textContent=fmt(tot);
+  if(countEl) countEl.textContent=importCart.length+' sản phẩm · '+importCart.reduce((s,i)=>s+i.qty,0)+' cái';
 }
 window.impChangeQty=(i,d)=>{importCart[i].qty=Math.max(1,(importCart[i].qty||1)+d);renderImportCart();};
 window.impSetQty=(i,v)=>{importCart[i].qty=Math.max(1,parseInt(v)||1);renderImportCart();};
