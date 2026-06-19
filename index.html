@@ -870,7 +870,7 @@ window.filterInventory = () => {
       </tr></thead>
       <tbody>
         ${slice.map(([k,p],i)=>`
-        <tr>
+        <tr onclick="editProduct('${k}')" style="cursor:pointer">
           <td class="text-muted">${(invPage-1)*invPerPage+i+1}</td>
           <td style="font-weight:600;max-width:220px">${p.name}</td>
           <td>${p.group||p.category||'<span class="text-muted">--</span>'}</td>
@@ -882,8 +882,8 @@ window.filterInventory = () => {
           <td style="text-align:right">${fmt((p.avgPrice||p.importPrice||0)*(p.stock||0))}</td>
           <td style="font-size:12px;color:var(--text-3)">${p.warranty||'--'}</td>
           <td style="text-align:center">
-            <button class="btn btn-outline btn-sm" onclick="editProduct('${k}')">✏️</button>
-            <button class="btn btn-sm" style="background:var(--red-light);color:var(--red)" onclick="deleteProduct('${k}','${p.name.replace(/'/g,"\\'")}')">🗑</button>
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();editProduct('${k}')">✏️</button>
+            <button class="btn btn-sm" style="background:var(--red-light);color:var(--red)" onclick="event.stopPropagation();deleteProduct('${k}','${p.name.replace(/'/g,"\\'")}')">🗑</button>
           </td>
         </tr>`).join('') || '<tr><td colspan="9" class="empty-state">Không tìm thấy sản phẩm nào</td></tr>'}
       </tbody>
@@ -1375,7 +1375,7 @@ window.editOrderModal = function() {
     + ' oninput="editCustSearch(this.value)" />'
     + '<div id="edit-cust-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:300;background:#fff;border:1.5px solid var(--blue);border-radius:0 0 10px 10px;max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(26,111,212,0.15)"></div>'
     + '</div></div>'
-    + '<div id="edit-cust-selected" style="margin-top:6px;padding:7px 10px;background:var(--blue-light);border-radius:7px;font-size:12px;display:flex;align-items:center;justify-content:space-between">'
+    + '<div id="edit-cust-selected" style="margin-top:6px;padding:7px 10px;background:var(--blue-light);border-radius:7px;font-size:12px;display:' + (o.customerKey ? 'flex' : 'none') + ';align-items:center;justify-content:space-between">'
     + '<span id="edit-cust-label" style="font-weight:600;color:var(--blue-dark)">👤 ' + (o.customerName||'Khách lẻ') + (o.customerPhone ? ' · '+o.customerPhone : '') + '</span>'
     + '<button onclick="editCustClear()" style="background:none;border:none;cursor:pointer;color:var(--blue-dark);font-size:14px">×</button>'
     + '</div>'
