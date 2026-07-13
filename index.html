@@ -1784,8 +1784,33 @@ window.deleteSupplier = async (key,name) => {
 };
 
 // ── IMPORT ──
+let importViewMode = 'create'; // 'create' | 'history'
+let impHistPeriod = 'month'; // 'week' | 'month' | 'all' | 'custom'
+let impHistCustomFrom = '';
+let impHistCustomTo = '';
+let impHistPage = 1; const impHistPerPage = 30;
+
 function renderImport(content, actions) {
-  actions.innerHTML = `<button class="btn btn-primary" onclick="createImportReceipt()">✅ Lưu phiếu nhập</button>`;
+  importViewMode = 'create';
+  renderImportPage(content, actions);
+}
+
+window.switchImportView = (mode) => {
+  importViewMode = mode;
+  renderImportPage(document.getElementById('main-content'), document.getElementById('topbar-actions'));
+};
+
+function renderImportPage(content, actions) {
+  if (importViewMode === 'history') { renderImportHistory(content, actions); return; }
+  renderImportCreate(content, actions);
+}
+
+function renderImportCreate(content, actions) {
+  actions.innerHTML = `
+    <div class="flex-gap">
+      <button class="btn btn-outline" onclick="switchImportView('history')">📜 Lịch sử nhập hàng</button>
+      <button class="btn btn-primary" onclick="createImportReceipt()">✅ Lưu phiếu nhập</button>
+    </div>`;
   // Gộp NCC + KH (những người là supplier)
   const suppOptions = [
     ...Object.entries(allSuppliers).map(([k,s])=>`<option value="supp_${k}">[NCC] ${s.name}</option>`),
@@ -1887,6 +1912,119 @@ function renderImport(content, actions) {
 
   </div>`;
 }
+
+// ── LỊCH SỬ NHẬP HÀNG ──
+function renderImportHistory(content, actions) {
+  impHistPage = 1;
+  actions.innerHTML = `<button class="btn btn-outline" onclick="switchImportView('create')">➕ Tạo phiếu nhập</button>`;
+  content.innerHTML = `
+  <div class="flex-gap" style="margin-bottom:14px;flex-wrap:wrap">
+    <div class="tabs" id="imph-tabs" style="margin-bottom:0;border-bottom:none">
+      <button class="tab" data-period="week" onclick="setImpHistPeriod('week')">Tuần này</button>
+      <button class="tab active" data-period="month" onclick="setImpHistPeriod('month')">Tháng này</button>
+      <button class="tab" data-period="all" onclick="setImpHistPeriod('all')">Tất cả</button>
+    </div>
+    <input type="date" id="imph-from" style="font-size:13px" onchange="setImpHistCustom()">
+    <span style="color:var(--text-3);align-self:center">→</span>
+    <input type="date" id="imph-to" style="font-size:13px" onchange="setImpHistCustom()">
+    <div class="search-box" style="flex:1;min-width:180px"><input type="search" id="imph-search" placeholder="Tìm theo NCC, khách hàng, ghi chú..." style="width:100%" oninput="filterImportHistory()"></div>
+  </div>
+  <div id="imph-wrap"></div>`;
+  filterImportHistory();
+}
+
+function getImpHistRange() {
+  const now = new Date();
+  let from, to = Date.now();
+  if (impHistPeriod === 'week') {
+    const d = new Date(now); d.setDate(d.getDate() - d.getDay() + 1); d.setHours(0,0,0,0);
+    from = d.getTime();
+  } else if (impHistPeriod === 'month') {
+    const d = new Date(now); d.setDate(1); d.setHours(0,0,0,0);
+    from = d.getTime();
+  } else if (impHistPeriod === 'custom' && impHistCustomFrom) {
+    from = new Date(impHistCustomFrom).getTime();
+    to = impHistCustomTo ? new Date(impHistCustomTo).getTime() + 86400000 - 1 : Date.now();
+  } else { from = 0; }
+  return { from, to };
+}
+
+window.setImpHistPeriod = (p) => {
+  impHistPeriod = p;
+  impHistPage = 1;
+  document.querySelectorAll('#imph-tabs .tab').forEach(el=>el.classList.toggle('active', el.dataset.period===p));
+  const fromEl = document.getElementById('imph-from'), toEl = document.getElementById('imph-to');
+  if (fromEl) fromEl.value = ''; if (toEl) toEl.value = '';
+  impHistCustomFrom = ''; impHistCustomTo = '';
+  filterImportHistory();
+};
+
+window.setImpHistCustom = () => {
+  impHistCustomFrom = document.getElementById('imph-from')?.value || '';
+  impHistCustomTo = document.getElementById('imph-to')?.value || '';
+  if (impHistCustomFrom) {
+    impHistPeriod = 'custom';
+    impHistPage = 1;
+    document.querySelectorAll('#imph-tabs .tab').forEach(el=>el.classList.remove('active'));
+    filterImportHistory();
+  }
+};
+
+window.filterImportHistory = () => {
+  const q = (document.getElementById('imph-search')?.value||'').toLowerCase();
+  const { from, to } = getImpHistRange();
+  let receipts = Object.entries(allImportReceipts).filter(([k,r]) => {
+    if ((r.createdAt||0) < from || (r.createdAt||0) > to) return false;
+    if (q && !(r.supplierName||'').toLowerCase().includes(q) && !(r.note||'').toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+
+  // Thống kê tổng nhập: tháng này / năm nay / toàn thời gian (độc lập với bộ lọc danh sách)
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const yearStart = new Date(now.getFullYear(), 0, 1).getTime();
+  const allReceipts = Object.values(allImportReceipts);
+  const monthTotal = allReceipts.filter(r=>(r.createdAt||0)>=monthStart).reduce((s,r)=>s+(r.total||0),0);
+  const yearTotal = allReceipts.filter(r=>(r.createdAt||0)>=yearStart).reduce((s,r)=>s+(r.total||0),0);
+  const allTotal = allReceipts.reduce((s,r)=>s+(r.total||0),0);
+
+  const total = receipts.length;
+  const pages = Math.ceil(total/impHistPerPage) || 1;
+  const slice = receipts.slice((impHistPage-1)*impHistPerPage, impHistPage*impHistPerPage);
+  const filteredTotal = receipts.reduce((s,[,r])=>s+(r.total||0),0);
+
+  const wrap = document.getElementById('imph-wrap'); if (!wrap) return;
+  wrap.innerHTML = `
+  <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">
+    <div class="stat-card orange"><div class="stat-label">Tổng nhập tháng này</div><div class="stat-value">${fmt(monthTotal)}</div></div>
+    <div class="stat-card orange"><div class="stat-label">Tổng nhập năm nay</div><div class="stat-value">${fmt(yearTotal)}</div></div>
+    <div class="stat-card orange"><div class="stat-label">Tổng nhập toàn thời gian</div><div class="stat-value">${fmt(allTotal)}</div></div>
+  </div>
+  <div class="table-wrap">
+    <div class="table-header"><span class="table-title">Lịch sử nhập hàng</span><span class="text-muted" style="font-size:12px">${fmtN(total)} phiếu · Tổng: ${fmt(filteredTotal)}</span></div>
+    <table>
+      <thead><tr><th>Thời gian</th><th>NCC / Khách hàng</th><th>Ghi chú</th><th style="text-align:center">Số SP</th><th style="text-align:right">Tổng nhập</th><th style="text-align:center">Thao tác</th></tr></thead>
+      <tbody>
+        ${slice.map(([k,r])=>`
+        <tr onclick="viewImportReceipt('${k}')" style="cursor:pointer">
+          <td style="font-size:12px;color:var(--text-3)">${fmtDate(r.createdAt)}</td>
+          <td style="font-weight:600">${r.supplierName||'Không rõ'}</td>
+          <td style="font-size:12px;color:var(--text-3);max-width:200px">${r.note||'--'}</td>
+          <td style="text-align:center">${(r.items||[]).reduce((s,i)=>s+i.qty,0)}</td>
+          <td style="text-align:right" class="price-tag">${fmt(r.total)}</td>
+          <td style="text-align:center"><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewImportReceipt('${k}')">👁 Xem</button></td>
+        </tr>`).join('')||'<tr><td colspan="6" class="empty-state">Chưa có phiếu nhập nào</td></tr>'}
+      </tbody>
+    </table>
+    <div class="pagination">
+      <button class="page-btn" onclick="impHistChangePage(${impHistPage-1})" ${impHistPage<=1?'disabled':''}>‹</button>
+      ${Array.from({length:Math.min(pages,7)},(_,i)=>{let p=i+1;if(pages>7){if(impHistPage<=4)p=i+1;else if(impHistPage>=pages-3)p=pages-6+i;else p=impHistPage-3+i;}return`<button class="page-btn ${p===impHistPage?'active':''}" onclick="impHistChangePage(${p})">${p}</button>`;}).join('')}
+      <button class="page-btn" onclick="impHistChangePage(${impHistPage+1})" ${impHistPage>=pages?'disabled':''}>›</button>
+      <span class="page-info">Trang ${impHistPage}/${pages}</span>
+    </div>
+  </div>`;
+};
+window.impHistChangePage = p => { impHistPage=p; filterImportHistory(); };
 
 window.openAddProductFromImport = () => {
   document.getElementById('modal-product-title').textContent = 'Tạo sản phẩm mới';
@@ -2254,7 +2392,7 @@ window.saveEditImport = async function() {
   toast('Đã lưu thay đổi phiếu nhập', 'success');
   viewImportReceipt(key);
   restoreOrderModalFooter();
-  if (currentPage === 'import') renderImport(document.getElementById('main-content'), document.getElementById('topbar-actions'));
+  if (currentPage === 'import') renderImportPage(document.getElementById('main-content'), document.getElementById('topbar-actions'));
 };
 let catalogView = 'list'; // 'grid' | 'list'
 let catalogPage = 1; const catalogPerPage = 48;
