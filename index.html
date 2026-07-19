@@ -477,6 +477,17 @@
   </div>
 </div>
 
+<!-- MODAL TRẢ HÀNG -->
+<div class="modal-overlay" id="modal-return">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <h3 id="modal-return-title">Trả hàng</h3>
+      <button class="btn-close" onclick="closeModal('modal-return')">×</button>
+    </div>
+    <div class="modal-body" id="modal-return-body"></div>
+  </div>
+</div>
+
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -507,11 +518,13 @@ let allCustomers = {};
 let allSuppliers = {};
 let allOrders = {};
 let allImportReceipts = {};
+let allReturns = {};
 let cart = [];
 let selectedCustomer = null;
 let editingOrderKey = null;
 let currentViewingOrderKey = null;
 let currentViewingImportKey = null;
+let returnSelectedOrderKey = null;
 
 // pagination
 let invPage = 1; const invPerPage = 50;
@@ -548,18 +561,20 @@ onAuthStateChanged(auth, user => {
 
 // ── DATA LOAD ──
 async function loadAllData() {
-  const [pSnap, cSnap, sSnap, oSnap, iSnap] = await Promise.all([
+  const [pSnap, cSnap, sSnap, oSnap, iSnap, rSnap] = await Promise.all([
     get(ref(db, 'products')),
     get(ref(db, 'customers')),
     get(ref(db, 'suppliers')),
     get(ref(db, 'orders')),
-    get(ref(db, 'importReceipts'))
+    get(ref(db, 'importReceipts')),
+    get(ref(db, 'returns'))
   ]);
   allProducts = pSnap.val() || {};
   allCustomers = cSnap.val() || {};
   allSuppliers = sSnap.val() || {};
   allOrders = oSnap.val() || {};
   allImportReceipts = iSnap.val() || {};
+  allReturns = rSnap.val() || {};
   navigate('dashboard');
 }
 
@@ -651,14 +666,21 @@ window.setDashCustom = () => {
 function renderDashboard(content, actions) {
   const prods = Object.values(allProducts);
   const orders = Object.values(allOrders);
+  const returnsArr = Object.values(allReturns);
   const { from, to } = getDashRange();
   const filteredOrders = orders.filter(o => o.createdAt >= from && o.createdAt <= to);
-  const revenue = filteredOrders.reduce((s,o)=>s+(o.total||0),0);
-  const profit = filteredOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
+  const filteredReturns = returnsArr.filter(r => r.createdAt >= from && r.createdAt <= to);
+  const returnTotal = filteredReturns.reduce((s,r)=>s+(r.totalReturn||0),0);
+  const returnProfit = filteredReturns.reduce((s,r)=>s+((r.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
+  let revenue = filteredOrders.reduce((s,o)=>s+(o.total||0),0) - returnTotal;
+  let profit = filteredOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0) - returnProfit;
   const today = new Date(); today.setHours(0,0,0,0);
   const todayOrders = orders.filter(o => o.createdAt >= today.getTime());
-  const todayRevenue = todayOrders.reduce((s,o)=>s+(o.total||0),0);
-  const todayProfit = todayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
+  const todayReturns = returnsArr.filter(r => r.createdAt >= today.getTime());
+  const todayReturnTotal = todayReturns.reduce((s,r)=>s+(r.totalReturn||0),0);
+  const todayReturnProfit = todayReturns.reduce((s,r)=>s+((r.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
+  let todayRevenue = todayOrders.reduce((s,o)=>s+(o.total||0),0) - todayReturnTotal;
+  let todayProfit = todayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0) - todayReturnProfit;
   const totalStock = prods.reduce((s,p)=>s+(p.avgPrice||p.importPrice||0)*(p.stock||0),0);
   const lowStock = prods.filter(p=>(p.stock||0)>0&&(p.stock||0)<=3).length;
   const outStock = prods.filter(p=>p.name&&(p.stock||0)===0).length;
@@ -669,15 +691,24 @@ function renderDashboard(content, actions) {
     if(!salesMap[i.name]) salesMap[i.name]={name:i.name,qty:0,revenue:0,profit:0};
     salesMap[i.name].qty+=i.qty; salesMap[i.name].revenue+=i.subtotal||i.price*i.qty; salesMap[i.name].profit+=pft;
   }));
+  filteredReturns.forEach(r=>(r.items||[]).forEach(i=>{
+    const imp = allProducts[i.key]?.importPrice||0;
+    const pft = (i.price-imp)*i.qty;
+    if(!salesMap[i.name]) salesMap[i.name]={name:i.name,qty:0,revenue:0,profit:0};
+    salesMap[i.name].qty-=i.qty; salesMap[i.name].revenue-=i.subtotal||i.price*i.qty; salesMap[i.name].profit-=pft;
+  }));
   const topProducts = Object.values(salesMap).sort((a,b)=>b.profit-a.profit).slice(0,5);
   const chartDays = 30;
   const chartData = Array.from({length:chartDays},(_,i)=>{
     const d = new Date(); d.setDate(d.getDate()-chartDays+1+i); d.setHours(0,0,0,0);
     const next = new Date(d); next.setDate(next.getDate()+1);
     const dayOrders = orders.filter(o=>o.createdAt>=d.getTime()&&o.createdAt<next.getTime());
+    const dayReturns = returnsArr.filter(r=>r.createdAt>=d.getTime()&&r.createdAt<next.getTime());
+    const dayReturnTotal = dayReturns.reduce((s,r)=>s+(r.totalReturn||0),0);
+    const dayReturnProfit = dayReturns.reduce((s,r)=>s+((r.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0);
     return { label:String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0'),
-      rev:dayOrders.reduce((s,o)=>s+(o.total||0),0),
-      profit:dayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0) };
+      rev:dayOrders.reduce((s,o)=>s+(o.total||0),0) - dayReturnTotal,
+      profit:dayOrders.reduce((s,o)=>s+((o.items||[]).reduce((ss,i)=>ss+(i.price-(allProducts[i.key]?.importPrice||0))*i.qty,0)),0) - dayReturnProfit };
   });
   const periodLabel = dashPeriodLabels[dashPeriod]||'Tùy Chỉnh';
   const periods = ['today','yesterday','week','month','all'];
@@ -686,6 +717,7 @@ function renderDashboard(content, actions) {
     <div class="flex-gap">
       <button class="btn btn-primary" onclick="navigate('sell')">🛒 Tạo đơn mới</button>
       <button class="btn btn-outline" onclick="navigate('import')">📦 Nhập hàng</button>
+      <button class="btn btn-outline" onclick="openReturnModal()">↩️ Trả hàng</button>
       <button class="btn btn-outline" onclick="navigate('warranty')">🔧 Bảo hành</button>
     </div>`;
 
@@ -700,9 +732,9 @@ function renderDashboard(content, actions) {
 
   content.innerHTML = filterBar + `
   <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:22px">
-    <div class="stat-card"><div class="stat-label">Doanh thu hôm nay</div><div class="stat-value" style="font-size:18px">${fmt(todayRevenue)}</div><div class="stat-sub">${todayOrders.length} đơn hàng</div></div>
+    <div class="stat-card"><div class="stat-label">Doanh thu hôm nay</div><div class="stat-value" style="font-size:18px">${fmt(todayRevenue)}</div><div class="stat-sub">${todayOrders.length} đơn hàng${todayReturnTotal?' · Trả: '+fmt(todayReturnTotal):''}</div></div>
     <div class="stat-card green"><div class="stat-label">Lợi nhuận hôm nay</div><div class="stat-value" style="font-size:18px">${fmt(todayProfit)}</div><div class="stat-sub">Biên ${todayRevenue?Math.round(todayProfit/todayRevenue*100):0}%</div></div>
-    <div class="stat-card"><div class="stat-label">Doanh thu · ${periodLabel}</div><div class="stat-value" style="font-size:18px">${fmt(revenue)}</div><div class="stat-sub">${filteredOrders.length} đơn</div></div>
+    <div class="stat-card"><div class="stat-label">Doanh thu · ${periodLabel}</div><div class="stat-value" style="font-size:18px">${fmt(revenue)}</div><div class="stat-sub">${filteredOrders.length} đơn${returnTotal?' · Trả: '+fmt(returnTotal):''}</div></div>
     <div class="stat-card green"><div class="stat-label">Lợi nhuận · ${periodLabel}</div><div class="stat-value" style="font-size:18px">${fmt(profit)}</div><div class="stat-sub">Biên ${revenue?Math.round(profit/revenue*100):0}%</div></div>
     <div class="stat-card orange"><div class="stat-label">Giá trị tồn kho</div><div class="stat-value" style="font-size:18px">${fmt(totalStock)}</div><div class="stat-sub">${prods.filter(p=>p.name&&(p.stock||0)>0).length} mặt hàng</div></div>
     <div class="stat-card red"><div class="stat-label">Cảnh báo kho</div><div class="stat-value" style="font-size:18px">${lowStock+outStock}</div><div class="stat-sub">${outStock} hết · ${lowStock} sắp hết</div></div>
@@ -782,6 +814,140 @@ const timeAgo = ts => {
 };
 window.viewOrderFromKey = (key) => { if(key && allOrders[key]) showOrderDetail(allOrders[key], key); };
 
+// ── TRẢ HÀNG ──
+window.openReturnModal = () => {
+  returnSelectedOrderKey = null;
+  document.getElementById('modal-return-title').textContent = 'Trả hàng - Tìm hóa đơn';
+  document.getElementById('modal-return-body').innerHTML = `
+    <div class="search-box" style="margin-bottom:12px"><input type="search" id="return-search" placeholder="Tìm mã đơn, tên khách, SĐT..." style="width:100%" oninput="searchReturnOrders(this.value)"></div>
+    <div id="return-order-list"><div class="empty-state" style="padding:24px"><div class="icon">🔍</div>Nhập để tìm hóa đơn của khách</div></div>
+  `;
+  document.getElementById('modal-return').classList.add('open');
+  setTimeout(()=>document.getElementById('return-search')?.focus(), 50);
+};
+
+window.searchReturnOrders = (q) => {
+  q = q.toLowerCase().trim();
+  const el = document.getElementById('return-order-list'); if(!el) return;
+  if(!q){ el.innerHTML = '<div class="empty-state" style="padding:24px"><div class="icon">🔍</div>Nhập để tìm hóa đơn của khách</div>'; return; }
+  const results = Object.entries(allOrders).filter(([k,o]) =>
+    (o.code||'').toLowerCase().includes(q) || (o.customerName||'').toLowerCase().includes(q) || (o.customerPhone||'').includes(q)
+  ).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)).slice(0,30);
+  if(!results.length){ el.innerHTML = '<div class="empty-state" style="padding:24px">Không tìm thấy hóa đơn</div>'; return; }
+  el.innerHTML = results.map(([k,o])=>`
+    <div class="product-row" onclick="selectReturnOrder('${k}')">
+      <div>
+        <div class="product-name">${o.code||k.slice(0,8)} · ${o.customerName||'Khách lẻ'}</div>
+        <div class="product-meta">${fmtDate(o.createdAt)} · ${(o.items||[]).length} sản phẩm</div>
+      </div>
+      <div class="product-price">${fmt(o.total)}</div>
+    </div>`).join('');
+};
+
+window.selectReturnOrder = (key) => {
+  const o = allOrders[key]; if(!o) return;
+  returnSelectedOrderKey = key;
+  document.getElementById('modal-return-title').textContent = 'Trả hàng - ' + (o.code||key.slice(0,8));
+  const returnedQty = {};
+  Object.values(allReturns).forEach(r => {
+    if(r.orderKey !== key) return;
+    (r.items||[]).forEach(i => { returnedQty[i.key] = (returnedQty[i.key]||0) + i.qty; });
+  });
+  window._returnOrderItems = o.items || [];
+  window._returnMaxQty = (o.items||[]).map(i => Math.max(0, i.qty - (returnedQty[i.key]||0)));
+  document.getElementById('modal-return-body').innerHTML = `
+    <div style="font-size:12px;color:var(--text-3);margin-bottom:10px">
+      <b style="color:var(--text)">${o.code||'--'}</b> · ${o.customerName||'Khách lẻ'} · ${fmtDate(o.createdAt)}
+    </div>
+    <div id="return-items-list">
+      ${(o.items||[]).map((i,idx)=>{
+        const already = returnedQty[i.key]||0;
+        const maxQty = window._returnMaxQty[idx];
+        return `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <input type="checkbox" data-idx="${idx}" class="return-chk" ${maxQty<=0?'disabled':''} onchange="updateReturnTotal()">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600">${i.name}</div>
+            <div style="font-size:11px;color:var(--text-3)">Đã mua: ${i.qty} · Đơn giá: ${fmt(i.price)}${already>0?' · Đã trả: '+already:''}${maxQty<=0?' · <span class="text-danger">Đã trả hết</span>':''}</div>
+          </div>
+          <input type="number" class="return-qty" data-idx="${idx}" value="${maxQty>0?1:0}" min="0" max="${maxQty}" style="width:60px;text-align:center" ${maxQty<=0?'disabled':''} onchange="clampReturnQty(${idx})">
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="margin-top:12px;text-align:right;font-size:14px;font-weight:700;color:var(--blue)" id="return-total">Tổng hoàn: 0đ</div>
+    <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="openReturnModal()">↩ Chọn đơn khác</button>
+      <button class="btn" style="background:var(--red);color:#fff" onclick="submitReturn()">✅ Xác nhận trả hàng</button>
+    </div>
+  `;
+  updateReturnTotal();
+};
+
+window.clampReturnQty = (idx) => {
+  const inp = document.querySelector('.return-qty[data-idx="'+idx+'"]'); if(!inp) return;
+  const max = window._returnMaxQty[idx]||0;
+  let v = parseInt(inp.value)||0;
+  if(v<0) v=0; if(v>max) v=max;
+  inp.value = v;
+  updateReturnTotal();
+};
+
+window.updateReturnTotal = () => {
+  let total = 0;
+  document.querySelectorAll('.return-chk').forEach(chk => {
+    const idx = chk.dataset.idx;
+    if(chk.checked){
+      const qtyInp = document.querySelector('.return-qty[data-idx="'+idx+'"]');
+      const qty = parseInt(qtyInp?.value)||0;
+      const item = window._returnOrderItems[idx];
+      total += (item.price||0)*qty;
+    }
+  });
+  const el = document.getElementById('return-total');
+  if(el) el.textContent = 'Tổng hoàn: ' + fmt(total);
+};
+
+window.submitReturn = async () => {
+  const o = allOrders[returnSelectedOrderKey]; if(!o) { toast('Chưa chọn hóa đơn','error'); return; }
+  const items = [];
+  document.querySelectorAll('.return-chk').forEach(chk => {
+    const idx = chk.dataset.idx;
+    if(chk.checked){
+      const qtyInp = document.querySelector('.return-qty[data-idx="'+idx+'"]');
+      const qty = parseInt(qtyInp?.value)||0;
+      if(qty>0){
+        const item = window._returnOrderItems[idx];
+        items.push({key:item.key, name:item.name, qty, price:item.price, subtotal:item.price*qty});
+      }
+    }
+  });
+  if(!items.length){ toast('Vui lòng chọn sản phẩm và số lượng cần trả','error'); return; }
+  const totalReturn = items.reduce((s,i)=>s+i.subtotal,0);
+  const now = Date.now();
+  const returnRecord = {
+    orderKey: returnSelectedOrderKey, orderCode: o.code||'',
+    customerKey: o.customerKey||'', customerName: o.customerName||'Khách lẻ',
+    createdAt: now, items, totalReturn
+  };
+  const updates = {};
+  for(const item of items){
+    const p = allProducts[item.key];
+    if(p){
+      const newStock = (p.stock||0) + item.qty;
+      updates['products/'+item.key+'/stock'] = newStock;
+      allProducts[item.key].stock = newStock;
+    }
+  }
+  const rRef = push(ref(db,'returns'));
+  updates['returns/'+rRef.key] = returnRecord;
+  await update(ref(db), updates);
+  allReturns[rRef.key] = returnRecord;
+  toast('Đã trả hàng thành công! Hoàn lại: '+fmt(totalReturn), 'success');
+  closeModal('modal-return');
+  if(currentPage==='dashboard') renderDashboard(document.getElementById('main-content'), document.getElementById('topbar-actions'));
+  else if(currentPage==='inventory') filterInventory();
+};
+
 // ── INVENTORY ──
 function renderInventory(content, actions) {
   invPage = 1;
@@ -832,7 +998,6 @@ window.filterInventory = () => {
   const slice = prods.slice((invPage-1)*invPerPage, invPage*invPerPage);
   const totalVal = Object.values(allProducts).reduce((s,p)=>s+(p.avgPrice||p.importPrice||0)*(p.stock||0),0);
 
-  // Arrow indicator cho header
   const arrow = (col) => invSort===col ? (invSortDir===1?' ↑':' ↓') : '';
   const thStyle = 'cursor:pointer;user-select:none;white-space:nowrap';
 
@@ -948,7 +1113,6 @@ window.saveProduct = async () => {
   toast(existing.name ? 'Đã cập nhật sản phẩm' : 'Đã thêm sản phẩm mới', 'success');
   if (window._importProductCallback) {
     window._importProductCallback = false;
-    // Tự động thêm SP vừa tạo vào phiếu nhập
     const existingInCart = importCart.find(c=>c.key===key);
     if(existingInCart) existingInCart.qty++;
     else importCart.push({key, name:data.name, importPrice:data.importPrice||0, qty:1});
@@ -1143,7 +1307,6 @@ window.customerKeyNav = (e) => {
   }
 };
 
-// Close suggest when clicking outside
 document.addEventListener('click', e=>{
   if(!e.target.closest('#cart-customer-input') && !e.target.closest('#customer-suggest'))
     { const b=document.getElementById('customer-suggest'); if(b) b.style.display='none'; }
@@ -1205,7 +1368,6 @@ window.createOrder = async () => {
     items: cart.map(i=>({key:i.key, name:i.name, qty:i.qty, price:i.price, subtotal:i.price*i.qty}))
   };
 
-  // Update stock
   const updates = {};
   for (const item of cart) {
     const p = allProducts[item.key];
@@ -1339,7 +1501,6 @@ window.printOrder = () => window.print();
 // ── ESC đóng modal ──
 document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
-  // Nếu đang ở chế độ sửa đơn thì hủy sửa, không đóng modal
   if (window._editItems !== null && window._editItems !== undefined) {
     cancelEditOrder();
     return;
@@ -1348,7 +1509,7 @@ document.addEventListener('keydown', function(e) {
     cancelEditImport();
     return;
   }
-  var ids = ['modal-order','modal-product','modal-customer','modal-supplier'];
+  var ids = ['modal-order','modal-product','modal-customer','modal-supplier','modal-return'];
   for (var i = 0; i < ids.length; i++) {
     var el = document.getElementById(ids[i]);
     if (el && el.classList.contains('open')) { el.classList.remove('open'); break; }
@@ -1547,7 +1708,6 @@ function renderCustomers(content, actions) {
 window.filterCustomers = () => {
   const q = (document.getElementById('cust-search')?.value||'').toLowerCase();
 
-  // Tính chi tiêu + số đơn từ allOrders
   const statsMap = {};
   Object.values(allOrders).forEach(o => {
     if (!o.customerKey) return;
@@ -1587,8 +1747,6 @@ window.filterCustomers = () => {
         <th style="text-align:right;${thS}" onclick="custSortBy('spent')">Tổng chi tiêu${ar('spent')}</th>
         <th style="text-align:center;${thS}" onclick="custSortBy('orders')">Số đơn (năm)${ar('orders')}</th>
         <th style="text-align:right">Công nợ</th>
-        <th style="text-align:center">Thao tác</th>
-      </tr></thead>
         <th style="text-align:center">Thao tác</th>
       </tr></thead>
       <tbody>
@@ -1765,7 +1923,6 @@ window.saveSupplier = async () => {
   const data = {...existing, name, phone, address:document.getElementById('s-address').value.trim(), isCustomer, timestamp:Date.now()};
   await set(ref(db,'suppliers/'+key), data);
   allSuppliers[key] = data;
-  // Nếu cũng là KH thì thêm vào danh sách khách hàng
   if(isCustomer) {
     const cData = {...(allCustomers[key]||{}), name, phone, address:data.address, _isSupplier:true};
     await set(ref(db,'customers/'+key), cData);
@@ -1811,7 +1968,6 @@ function renderImportCreate(content, actions) {
       <button class="btn btn-outline" onclick="switchImportView('history')">📜 Lịch sử nhập hàng</button>
       <button class="btn btn-primary" onclick="createImportReceipt()">✅ Lưu phiếu nhập</button>
     </div>`;
-  // Gộp NCC + KH (những người là supplier)
   const suppOptions = [
     ...Object.entries(allSuppliers).map(([k,s])=>`<option value="supp_${k}">[NCC] ${s.name}</option>`),
     ...Object.entries(allCustomers).filter(([k,c])=>c.name).map(([k,c])=>`<option value="cust_${k}">[KH] ${c.name}${c.phone?' · '+c.phone:''}</option>`)
@@ -1819,10 +1975,8 @@ function renderImportCreate(content, actions) {
   content.innerHTML = `
   <div style="display:grid;grid-template-columns:1fr 340px;gap:14px;height:calc(100vh - var(--header-h) - 40px)">
 
-    <!-- CỘT TRÁI: Tìm SP + Bảng nhập + Lịch sử -->
     <div style="display:flex;flex-direction:column;gap:12px;overflow-y:auto;min-width:0">
 
-      <!-- Tìm sản phẩm -->
       <div class="table-wrap" style="flex-shrink:0">
         <div class="table-header">
           <span class="table-title">🔍 Tìm sản phẩm</span>
@@ -1836,7 +1990,6 @@ function renderImportCreate(content, actions) {
         </div>
       </div>
 
-      <!-- Bảng SP đang nhập -->
       <div class="table-wrap" style="flex:1;display:flex;flex-direction:column;min-height:200px">
         <div class="table-header" style="flex-shrink:0">
           <span class="table-title">🛒 Danh sách sản phẩm nhập</span>
@@ -1848,7 +2001,6 @@ function renderImportCreate(content, actions) {
         </div>
       </div>
 
-      <!-- Lịch sử nhập hàng -->
       <div class="table-wrap" style="flex-shrink:0">
         <div class="table-header"><span class="table-title">📥 Lịch sử nhập hàng gần nhất</span></div>
         <table>
@@ -1875,11 +2027,9 @@ function renderImportCreate(content, actions) {
 
     </div>
 
-    <!-- CỘT PHẢI: Thông tin phiếu nhập (cố định) -->
     <div class="table-wrap" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
       <div class="table-header" style="flex-shrink:0"><span class="table-title">📦 Thông tin phiếu nhập</span></div>
       <div style="padding:14px;display:flex;flex-direction:column;gap:12px;flex:1">
-        <!-- NCC -->
         <div style="position:relative">
           <div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px">Nhà cung cấp / Khách hàng</div>
           <div style="position:relative">
@@ -1895,12 +2045,10 @@ function renderImportCreate(content, actions) {
           <div id="imp-supplier-suggest" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:200;background:#fff;border:1.5px solid var(--blue);border-radius:0 0 10px 10px;max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(26,111,212,0.15)"></div>
           <input type="hidden" id="imp-supplier" value="">
         </div>
-        <!-- Ghi chú -->
         <div>
           <div style="font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px">Ghi chú</div>
           <textarea id="imp-note" rows="3" style="width:100%;resize:none" placeholder="Ghi chú phiếu nhập..."></textarea>
         </div>
-        <!-- Tổng tiền -->
         <div style="margin-top:auto;padding-top:12px;border-top:2px solid var(--border)">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:14px;font-weight:700">Tổng nhập:</span>
@@ -1913,7 +2061,6 @@ function renderImportCreate(content, actions) {
   </div>`;
 }
 
-// ── LỊCH SỬ NHẬP HÀNG ──
 function renderImportHistory(content, actions) {
   impHistPage = 1;
   actions.innerHTML = `<button class="btn btn-outline" onclick="switchImportView('create')">➕ Tạo phiếu nhập</button>`;
@@ -1979,7 +2126,6 @@ window.filterImportHistory = () => {
     return true;
   }).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
 
-  // Thống kê tổng nhập: tháng này / năm nay / toàn thời gian (độc lập với bộ lọc danh sách)
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
   const yearStart = new Date(now.getFullYear(), 0, 1).getTime();
@@ -2030,7 +2176,6 @@ window.openAddProductFromImport = () => {
   document.getElementById('modal-product-title').textContent = 'Tạo sản phẩm mới';
   ['p-name','p-import','p-price','p-stock','p-warranty','p-key'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('p-group').value = '';
-  // Callback sau khi lưu: tự động thêm vào phiếu nhập
   window._importProductCallback = true;
   document.getElementById('modal-product').classList.add('open');
 };
@@ -2243,7 +2388,6 @@ window.editImportModal = function() {
   window._editImportSuppName = r.supplierName || '';
   window._editImportSuppType = r.supplierType || '';
 
-  // Build supplier display label
   var suppLabel = r.supplierName ? ((r.supplierType==='supplier'?'[NCC] ':'[KH] ') + r.supplierName) : 'Chưa chọn';
 
   document.getElementById('modal-order-body').innerHTML =
@@ -2404,7 +2548,6 @@ const DEFAULT_GROUPS = ['CPU','RAM','Mainboard','VGA','SSD','HDD','Nguồn','Cas
 async function loadGroups() {
   const snap = await get(ref(db, 'groups'));
   allGroups = snap.val() || {};
-  // Nếu chưa có gì trong Firebase, seed từ DEFAULT_GROUPS
   if (!Object.keys(allGroups).length) {
     const updates = {};
     DEFAULT_GROUPS.forEach(name => {
@@ -2444,7 +2587,6 @@ function renderCatalog(content, actions) {
 
   content.innerHTML = `
     <div style="display:grid;grid-template-columns:200px 1fr;gap:14px;min-height:calc(100vh - var(--header-h) - 44px)">
-      <!-- SIDEBAR NHÓM -->
       <div class="table-wrap" style="display:flex;flex-direction:column;align-self:start;position:sticky;top:0">
         <div class="table-header" style="padding:12px 14px">
           <span class="table-title" style="font-size:13px">🏷️ Nhóm hàng</span>
@@ -2452,7 +2594,6 @@ function renderCatalog(content, actions) {
         </div>
         <div id="cat-group-list" style="overflow-y:auto;max-height:calc(100vh - 160px)"></div>
       </div>
-      <!-- NỘI DUNG -->
       <div id="cat-wrap"></div>
     </div>`;
 
@@ -2462,7 +2603,6 @@ function renderCatalog(content, actions) {
 function renderGroupSidebar() {
   const el = document.getElementById('cat-group-list'); if(!el) return;
   const groups = getGroupList();
-  // Đếm SP theo nhóm
   const countMap = {};
   Object.values(allProducts).forEach(p => {
     const g = p.group || p.category || '';
@@ -2481,8 +2621,6 @@ function renderGroupSidebar() {
     + groups.map(([k,g]) => {
       const cnt = countMap[g.name] || 0;
       const active = catalogSelectedGroup === g.name;
-      const bg = active ? 'background:var(--blue);' : '';
-      const col = active ? 'color:#fff;' : 'color:var(--text);';
       return '<div style="' + itemStyle(active) + 'position:relative" '
         + 'onmouseenter="this.querySelector(\'.grp-actions\').style.display=\'flex\'" '
         + 'onmouseleave="this.querySelector(\'.grp-actions\').style.display=\'none\'">'
@@ -2504,7 +2642,6 @@ window.selectCatalogGroup = (name) => {
   filterCatalog();
 };
 
-// CRUD nhóm
 window.openAddGroup = () => {
   const name = prompt('Tên nhóm mới:');
   if(!name || !name.trim()) return;
@@ -2524,7 +2661,6 @@ async function saveGroup(key, name, icon, oldName) {
   const k = key || name.replace(/[^a-zA-Z0-9]/g,'_') + '_' + Date.now().toString(36);
   await set(ref(db,'groups/'+k), { name, icon });
   allGroups[k] = { name, icon };
-  // Nếu đổi tên → cập nhật tất cả SP dùng nhóm cũ
   if(oldName && oldName !== name) {
     const updates = {};
     Object.entries(allProducts).forEach(([pk,p]) => {
@@ -2709,7 +2845,6 @@ window.catalogQuickView = (key) => {
 window.addToCartFromCatalog = (key) => {
   const p = allProducts[key]; if(!p) return;
   if((p.stock||0)<=0){ toast('Sản phẩm này đã hết hàng','error'); return; }
-  // Switch to sell page and add item
   navigate('sell');
   setTimeout(()=>{ addToCart(key); toast(p.name+' đã thêm vào đơn','success'); },100);
 };
