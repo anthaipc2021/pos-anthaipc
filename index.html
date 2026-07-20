@@ -321,6 +321,9 @@
       <button class="nav-item" onclick="navigate(&#39;orders&#39;)">
         <span class="icon">📋</span> Lịch sử đơn
       </button>
+      <button class="nav-item" onclick="navigate(&#39;returns&#39;)">
+        <span class="icon">↩️</span> Lịch sử trả hàng
+      </button>
       <div class="nav-section">Kho hàng</div>
       <button class="nav-item" onclick="navigate(&#39;inventory&#39;)">
         <span class="icon">📦</span> Tồn kho
@@ -583,12 +586,12 @@ window.navigate = (page) => {
   currentPage = page;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   const titles = {
-    dashboard:'Tổng quan', sell:'Bán hàng', orders:'Lịch sử đơn hàng',
+    dashboard:'Tổng quan', sell:'Bán hàng', orders:'Lịch sử đơn hàng', returns:'Lịch sử trả hàng',
     inventory:'Quản lý tồn kho', import:'Nhập hàng', catalog:'Danh sách hàng hóa',
     customers:'Khách hàng', suppliers:'Nhà cung cấp', warranty:'Tra cứu bảo hành'
   };
   document.getElementById('page-title').textContent = titles[page] || page;
-  const navMap = {dashboard:0, sell:1, orders:2, inventory:3, import:4, catalog:5, customers:6, suppliers:7, warranty:8};
+  const navMap = {dashboard:0, sell:1, orders:2, returns:3, inventory:4, import:5, catalog:6, customers:7, suppliers:8, warranty:9};
   const navItems = document.querySelectorAll('.nav-item');
   if (navMap[page] !== undefined) navItems[navMap[page]]?.classList.add('active');
 
@@ -600,6 +603,7 @@ window.navigate = (page) => {
     dashboard: renderDashboard,
     sell: renderSell,
     orders: renderOrders,
+    returns: renderReturns,
     inventory: renderInventory,
     import: renderImport,
     catalog: renderCatalog,
@@ -946,6 +950,7 @@ window.submitReturn = async () => {
   closeModal('modal-return');
   if(currentPage==='dashboard') renderDashboard(document.getElementById('main-content'), document.getElementById('topbar-actions'));
   else if(currentPage==='inventory') filterInventory();
+  else if(currentPage==='returns') filterReturns();
 };
 
 // ── INVENTORY ──
@@ -1497,6 +1502,110 @@ function showOrderDetail(o, key) {
   document.getElementById('modal-order').classList.add('open');
 }
 window.printOrder = () => window.print();
+
+// ── LỊCH SỬ TRẢ HÀNG ──
+let retPage = 1; const retPerPage = 30;
+
+function renderReturns(content, actions) {
+  retPage = 1;
+  actions.innerHTML = `
+    <div class="flex-gap">
+      <div class="search-box"><input type="search" id="ret-search" placeholder="Mã đơn, khách hàng..." style="width:220px" oninput="filterReturns()"></div>
+      <input type="date" id="ret-date" onchange="filterReturns()" style="font-size:13px">
+      <button class="btn btn-outline" onclick="openReturnModal()">↩️ Trả hàng mới</button>
+    </div>`;
+  content.innerHTML = `<div id="ret-table-wrap"></div>`;
+  filterReturns();
+}
+
+window.filterReturns = () => {
+  const q = (document.getElementById('ret-search')?.value||'').toLowerCase();
+  const d = document.getElementById('ret-date')?.value;
+  let rets = Object.entries(allReturns).filter(([k,r])=>{
+    if(q && !(r.orderCode||'').toLowerCase().includes(q) && !(r.customerName||'').toLowerCase().includes(q)) return false;
+    if(d){const rd=new Date(r.createdAt).toISOString().slice(0,10); if(rd!==d) return false;}
+    return true;
+  }).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+
+  const total=rets.length, pages=Math.ceil(total/retPerPage)||1;
+  const slice=rets.slice((retPage-1)*retPerPage, retPage*retPerPage);
+  const totalReturned = rets.reduce((s,[,r])=>s+(r.totalReturn||0),0);
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const monthTotal = Object.values(allReturns).filter(r=>(r.createdAt||0)>=monthStart).reduce((s,r)=>s+(r.totalReturn||0),0);
+
+  const wrap=document.getElementById('ret-table-wrap'); if(!wrap) return;
+  wrap.innerHTML=`
+  <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px">
+    <div class="stat-card red"><div class="stat-label">Tổng lượt trả (lọc)</div><div class="stat-value">${fmtN(total)}</div></div>
+    <div class="stat-card red"><div class="stat-label">Tổng tiền hoàn (lọc)</div><div class="stat-value">${fmt(totalReturned)}</div></div>
+    <div class="stat-card orange"><div class="stat-label">Tổng hoàn tháng này</div><div class="stat-value">${fmt(monthTotal)}</div></div>
+  </div>
+  <div class="table-wrap">
+    <div class="table-header"><span class="table-title">Lịch sử trả hàng</span><span class="text-muted" style="font-size:12px">${fmtN(total)} lượt</span></div>
+    <table>
+      <thead><tr><th>Ngày trả</th><th>Mã đơn gốc</th><th>Khách hàng</th><th style="text-align:center">Số SP trả</th><th style="text-align:right">Tổng hoàn</th><th style="text-align:center">Thao tác</th></tr></thead>
+      <tbody>
+        ${slice.map(([k,r])=>`
+        <tr onclick="viewReturnDetail('${k}')" style="cursor:pointer">
+          <td style="font-size:12px;color:var(--text-3)">${fmtDate(r.createdAt)}</td>
+          <td class="mono" style="font-weight:700;color:var(--blue)">${r.orderCode||(r.orderKey||'').slice(0,8)}</td>
+          <td>${r.customerName||'Khách lẻ'}</td>
+          <td style="text-align:center">${(r.items||[]).reduce((s,i)=>s+i.qty,0)}</td>
+          <td style="text-align:right;font-weight:700;color:var(--red)">-${fmt(r.totalReturn)}</td>
+          <td style="text-align:center">
+            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();viewReturnDetail('${k}')">👁 Xem</button>
+          </td>
+        </tr>`).join('')||'<tr><td colspan="6" class="empty-state">Chưa có lượt trả hàng nào</td></tr>'}
+      </tbody>
+    </table>
+    <div class="pagination">
+      <button class="page-btn" onclick="retChangePage(${retPage-1})" ${retPage<=1?'disabled':''}>‹</button>
+      ${Array.from({length:Math.min(pages,7)},(_,i)=>{let p=i+1;if(pages>7){if(retPage<=4)p=i+1;else if(retPage>=pages-3)p=pages-6+i;else p=retPage-3+i;}return`<button class="page-btn ${p===retPage?'active':''}" onclick="retChangePage(${p})">${p}</button>`;}).join('')}
+      <button class="page-btn" onclick="retChangePage(${retPage+1})" ${retPage>=pages?'disabled':''}>›</button>
+      <span class="page-info">Trang ${retPage}/${pages}</span>
+    </div>
+  </div>`;
+};
+window.retChangePage = p => { retPage=p; filterReturns(); };
+
+window.viewReturnDetail = (key) => {
+  const r = allReturns[key]; if(!r) return;
+  currentViewingOrderKey = null;
+  currentViewingImportKey = null;
+  const editBtn = document.getElementById('modal-order-edit-btn');
+  if (editBtn) editBtn.style.display = 'none';
+  document.getElementById('modal-order-body').innerHTML = `
+  <div style="font-size:12px;color:var(--text-3);margin-bottom:14px">
+    <b style="font-size:14px;color:var(--text)">Trả hàng · Đơn ${r.orderCode||(r.orderKey||'').slice(0,8)}</b> · ${fmtDate(r.createdAt)}
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;font-size:13px">
+    <div><b>Khách hàng:</b> ${r.customerName||'Khách lẻ'}</div>
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--bg)">
+      <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">Sản phẩm</th>
+      <th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">SL trả</th>
+      <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Đơn giá</th>
+      <th style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">Thành tiền</th>
+    </tr></thead>
+    <tbody>
+      ${(r.items||[]).map(i=>`<tr>
+        <td style="padding:8px;border-bottom:1px solid var(--border)">${i.name}</td>
+        <td style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">${i.qty}</td>
+        <td style="padding:8px;text-align:right;border-bottom:1px solid var(--border)">${fmt(i.price)}</td>
+        <td style="padding:8px;text-align:right;border-bottom:1px solid var(--border);font-weight:700">${fmt(i.subtotal||i.price*i.qty)}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+  <div style="margin-top:12px;text-align:right;font-size:13px">
+    <div style="font-size:18px;font-weight:700;color:var(--red);margin-top:4px">Tổng hoàn: -${fmt(r.totalReturn)}</div>
+  </div>
+  <div style="margin-top:14px;text-align:right">
+    <button class="btn btn-outline btn-sm" onclick="closeModal('modal-order');setTimeout(()=>viewOrderFromKey('${r.orderKey}'),100)">👁 Xem đơn hàng gốc</button>
+  </div>`;
+  document.getElementById('modal-order').classList.add('open');
+};
 
 // ── ESC đóng modal ──
 document.addEventListener('keydown', function(e) {
